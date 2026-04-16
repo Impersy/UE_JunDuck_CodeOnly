@@ -1,0 +1,48 @@
+
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/PlayerController.h"
+#include "JunDefine.h"
+#include "JunPlayerController.generated.h"
+
+
+struct FInputActionValue;
+
+/**
+ * 
+ */
+UCLASS()
+class JUNDUCK_API AJunPlayerController : public APlayerController
+{
+	GENERATED_BODY()
+
+public:
+	AJunPlayerController(const FObjectInitializer& objectInitializer);
+
+protected:
+	virtual void BeginPlay() override;
+	virtual void SetupInputComponent() override;
+	virtual void PlayerTick(float DeltaTime) override;
+
+
+
+private:
+	void Input_Move(const FInputActionValue& InputValue);
+	void Input_MoveReleased(const FInputActionValue& InputValue);
+	void Input_Turn(const FInputActionValue& InputValue);
+	void Input_Jump(const FInputActionValue& InputValue);
+	void Input_Dodge(const FInputActionValue& InputValue);
+	void Input_DodgeReleased(const FInputActionValue& InputValue);
+	void Input_BasicAttack(const FInputActionValue& InputValue);
+	void Input_LockOn(const FInputActionValue& InputValue);
+	void Input_Defense(const FInputActionValue& InputValue);
+	void Input_DefenseReleased(const FInputActionValue& InputValue);
+	void Input_RunStarted(const FInputActionValue& InputValue);
+	void Input_RunReleased(const FInputActionValue& InputValue);
+	void Input_WalkToggle(const FInputActionValue& InputValue);
+
+protected:
+	TObjectPtr<class AJunPlayer> JunPlayer;
+};

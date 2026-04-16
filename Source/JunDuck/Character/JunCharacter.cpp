@@ -1,0 +1,172 @@
+
+
+
+#include "Character/JunCharacter.h"
+#include "JunDefine.h"
+#include "JunGameplayTags.h"
+
+// Sets default values
+AJunCharacter::AJunCharacter()
+{
+ 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+
+
+	// 메쉬 충돌 프리셋
+	GetMesh()->SetCollisionProfileName(TEXT("CharacterHitMesh"));
+}
+
+// Called when the game starts or when spawned
+void AJunCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	
+}
+
+// Called every frame
+void AJunCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+}
+
+void AJunCharacter::OnDamaged(int32 Damage, TObjectPtr<AJunCharacter> Attacker)
+{
+	Hp = FMath::Clamp(Hp - Damage, 0, MaxHp);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			0.5f,
+			FColor::Green,
+			FString::Printf(TEXT("Hp: %d"), Hp)
+		);
+	}
+
+
+	if (Hp == 0) 
+	{
+		AddGameplayTag(JunGameplayTags::State_Condition_Dead);
+
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			0.5f,
+			FColor::Green,
+			FString::Printf(TEXT("Dead"), Hp)
+		);
+	}
+
+}
+
+void AJunCharacter::HighLight()
+{
+	bHighLighted = true;
+
+}
+
+void AJunCharacter::UnHighLight()
+{
+	bHighLighted = false;
+
+
+}
+
+void AJunCharacter::HandleGameplayEventNotify(FGameplayTag EventTag)
+{
+	// 상속 클래스에서 구현
+}
+
+void AJunCharacter::BeginAttackTraceWindow()
+{
+}
+
+void AJunCharacter::EndAttackTraceWindow()
+{
+}
+
+bool AJunCharacter::HasGameplayTag(FGameplayTag Tag) const
+{
+	return OwnedGameplayTags.HasTag(Tag);
+}
+
+void AJunCharacter::AddGameplayTag(FGameplayTag Tag)
+{
+	if (Tag.IsValid())
+	{
+		OwnedGameplayTags.AddTag(Tag);
+	}
+}
+
+void AJunCharacter::RemoveGameplayTag(FGameplayTag Tag)
+{
+	if (Tag.IsValid())
+	{
+		OwnedGameplayTags.RemoveTag(Tag);
+	}
+}
+
+bool AJunCharacter::Is_Invincible() const
+{
+	return HasGameplayTag(JunGameplayTags::State_Condition_Invincible);
+}
+
+bool AJunCharacter::Is_Dead() const
+{
+	return HasGameplayTag(JunGameplayTags::State_Condition_Dead);
+}
+
+FGameplayTag AJunCharacter::GetTeamTag() const
+{
+	if (HasGameplayTag(JunGameplayTags::Team_Player))
+	{
+		return JunGameplayTags::Team_Player;
+	}
+
+	if (HasGameplayTag(JunGameplayTags::Team_Enemy))
+	{
+		return JunGameplayTags::Team_Enemy;
+	}
+
+	return JunGameplayTags::Team_Neutral;
+}
+
+bool AJunCharacter::IsSameTeam(const AJunCharacter* Other) const
+{
+	if (!Other)
+	{
+		return false;
+	}
+
+	return GetTeamTag() == Other->GetTeamTag();
+}
+
+bool AJunCharacter::IsEnemyTo(const AJunCharacter* Other) const
+{
+	if (!Other)
+	{
+		return false;
+	}
+
+	const FGameplayTag MyTeam = GetTeamTag();
+	const FGameplayTag OtherTeam = Other->GetTeamTag();
+
+	if (MyTeam == JunGameplayTags::Team_Neutral || OtherTeam == JunGameplayTags::Team_Neutral)
+	{
+		return false;
+	}
+
+	return MyTeam != OtherTeam;
+}
+
+void AJunCharacter::SetTeamTag(FGameplayTag NewTeamTag)
+{
+	RemoveGameplayTag(JunGameplayTags::Team_Player);
+	RemoveGameplayTag(JunGameplayTags::Team_Enemy);
+	RemoveGameplayTag(JunGameplayTags::Team_Neutral);
+
+	AddGameplayTag(NewTeamTag);
+}
+
+
+

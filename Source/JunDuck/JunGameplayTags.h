@@ -1,0 +1,57 @@
+
+
+#pragma once
+
+#include "NativeGameplayTags.h"
+
+/**
+ * 
+ */
+namespace JunGameplayTags 
+{
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Move);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Turn);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Jump);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_BasicAttack);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Dodge);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_LockOn);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Run);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_WalkToggle);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Input_Action_Defense);
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_BasicAttack_ComboWindow);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_BasicAttack_ComboAdvance);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_BasicAttack_DefenseCancelOpen);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_BasicAttack_RecoveryOpen);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_Dodge_Start);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_Defense_ParryWindowBegin);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_Defense_ParryWindowEnd);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_Defense_GuardReady);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_Defense_EndBaseRelease);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Notify_Defense_GuardHoldBegin);
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Action_Attack);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Action_Dodge);
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Condition_Dead);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Condition_Invincible);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Condition_HitReact);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Condition_ControlLocked);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Condition_SuperArmor);
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_Move);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_Jump);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_Attack);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_Dodge);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_Input);
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Team_Player);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Team_Enemy);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Team_Neutral);
+
+
+
+
+
+
+}

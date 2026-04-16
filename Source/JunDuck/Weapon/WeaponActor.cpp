@@ -1,0 +1,229 @@
+
+
+
+#include "Weapon/WeaponActor.h"
+#include "Character/JunCharacter.h"
+#include "Character/JunMonster.h"
+#include "Character/JunPlayer.h"
+
+// Sets default values
+AWeaponActor::AWeaponActor()
+{
+ 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+
+	// 컴포넌트 추가
+	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	RootComponent = WeaponMesh;
+
+	// 무기 메쉬는 충돌 X
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMesh->SetGenerateOverlapEvents(false);
+
+	TraceStartPoint = CreateDefaultSubobject<USceneComponent>(TEXT("TraceStartPoint"));
+	TraceStartPoint->SetupAttachment(WeaponMesh);
+
+	TraceEndPoint = CreateDefaultSubobject<USceneComponent>(TEXT("TraceEndPoint"));
+	TraceEndPoint->SetupAttachment(WeaponMesh);
+
+	// 충돌 프리셋
+	WeaponMesh->SetCollisionProfileName(TEXT("WeaponAttachment"));
+
+}
+
+// Called when the game starts or when spawned
+void AWeaponActor::BeginPlay()
+{
+	Super::BeginPlay();
+	
+}
+
+// Called every frame
+void AWeaponActor::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bTraceActive)
+	{
+		UpdateAttackTrace();
+	}
+}
+
+void AWeaponActor::StartAttackTrace()
+{
+	bTraceActive = true;
+	HitActors.Empty();
+
+	PrevTraceStart = TraceStartPoint->GetComponentLocation();
+	PrevTraceEnd = TraceEndPoint->GetComponentLocation();
+}
+
+void AWeaponActor::EndAttackTrace()
+{
+	bTraceActive = false;
+	HitActors.Empty();
+}
+
+void AWeaponActor::StopAttackTrace()
+{
+	if (!bTraceActive)
+	{
+		return;
+	}
+
+	bTraceActive = false;
+	HitActors.Empty();
+}
+
+void AWeaponActor::UpdateAttackTrace()
+{
+
+	if (!TraceStartPoint || !TraceEndPoint)
+	{
+		return;
+	}
+
+	// 현재 프레임과 이전 프레임의 trace 위치를 비교해서
+	// "이번 공격이 어느 방향으로 스윙됐는지"를 같이 계산한다.
+
+	const FVector CurrentTraceStart = TraceStartPoint->GetComponentLocation();
+	const FVector CurrentTraceEnd = TraceEndPoint->GetComponentLocation();
+	const FVector SwingDirection = (((CurrentTraceStart - PrevTraceStart) + (CurrentTraceEnd - PrevTraceEnd)) * 0.5f).GetSafeNormal();
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+	QueryParams.AddIgnoredActor(GetOwner());
+
+	TSet<AActor*> CurrentFrameHitActors;
+
+	const int32 SampleCount = FMath::Max(2, TraceSampleCount);
+
+	for (int32 i = 0; i < SampleCount; ++i)
+	{
+		const float Alpha = (float)i / (float)(SampleCount - 1);
+
+		const FVector PrevSamplePoint = FMath::Lerp(PrevTraceStart, PrevTraceEnd, Alpha);
+		const FVector CurrSamplePoint = FMath::Lerp(CurrentTraceStart, CurrentTraceEnd, Alpha);
+
+		TArray<FHitResult> HitResults;
+
+		const bool bHit = GetWorld()->SweepMultiByChannel(
+			HitResults,
+			PrevSamplePoint,
+			CurrSamplePoint,
+			FQuat::Identity,
+			TraceChannel,
+			FCollisionShape::MakeSphere(TraceRadius),
+			QueryParams
+		);
+
+		// 디버그용
+		DrawDebugLine(GetWorld(), PrevSamplePoint, CurrSamplePoint, FColor::Yellow, false, 0.05f, 0, 1.0f);
+		DrawDebugSphere(GetWorld(), CurrSamplePoint, TraceRadius, 12, FColor::Cyan, false, 0.05f);
+
+		if (!bHit)
+		{
+			continue;
+		}
+
+		for (const FHitResult& Hit : HitResults)
+		{
+			AActor* HitActor = Hit.GetActor();
+			if (!HitActor)
+			{
+				continue;
+			}
+
+			// 중복 히트 방지
+			if (HitActors.Contains(HitActor))
+			{
+				continue;
+			}
+
+			if (CurrentFrameHitActors.Contains(HitActor))
+			{
+				continue;
+			}
+
+			CurrentFrameHitActors.Add(HitActor);
+			HitActors.Add(HitActor);
+
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					0.5f,
+					FColor::Red,
+					FString::Printf(TEXT("Hit: %s"), *HitActor->GetName())
+				);
+			}
+
+			ApplyDamageToHitCharacter(HitActor, SwingDirection);
+		}
+	}
+
+	PrevTraceStart = CurrentTraceStart;
+	PrevTraceEnd = CurrentTraceEnd;
+
+
+}
+
+void AWeaponActor::ApplyDamageToHitCharacter(AActor* HitActor, const FVector& SwingDirection)
+{
+	AJunCharacter* VictimCharacter = Cast<AJunCharacter>(HitActor);   // 맞은 대상
+	AJunCharacter* AttackerCharacter = Cast<AJunCharacter>(GetOwner()); // 공격한 대상
+
+	// 무기 쪽은 팀/무적/중복 체크까지만 하고,
+	// 실제 피격 반응 선택은 각 캐릭터(특히 몬스터)에게 위임한다.
+	if (VictimCharacter && AttackerCharacter)
+	{
+		if (!VictimCharacter || !AttackerCharacter)
+		{
+			return;
+		}
+
+		// 자기 자신이면 무시
+		if (VictimCharacter == AttackerCharacter)
+		{
+			return;
+		}
+
+		// 생존 체크
+		if (VictimCharacter->Is_Dead())
+		{
+			return;
+		}
+		
+		// 무적 체크
+		if (VictimCharacter->Is_Invincible())
+		{
+			return;
+		}
+
+		// 팀 체크
+		if (!AttackerCharacter->IsEnemyTo(VictimCharacter))
+		{
+			return;
+		}
+
+		
+		// 아니면 데미지 적용
+		// 나중엔 기본뎀이 아닌 최종 뎀을 여기서 계산해서 넘기자.
+		AJunMonster* HitMonster = Cast<AJunMonster>(VictimCharacter);
+
+		if (HitMonster)
+		{
+			HitMonster->ReceiveHit(EHitReactType::LightHit, BasicDamage, AttackerCharacter, SwingDirection);
+		}
+		else if (AJunPlayer* HitPlayer = Cast<AJunPlayer>(VictimCharacter))
+		{
+			HitPlayer->ReceiveHit(EHitReactType::LightHit, BasicDamage, AttackerCharacter, SwingDirection);
+		}
+		else
+		{
+			// 일단 플레이어 등 다른 캐릭터는 기존 방식 유지
+			VictimCharacter->OnDamaged(BasicDamage, AttackerCharacter);
+		}
+	}
+}
+
