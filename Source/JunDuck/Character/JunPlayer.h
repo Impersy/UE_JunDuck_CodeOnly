@@ -214,6 +214,9 @@ protected: // Defense
 	UFUNCTION()
 	void OnGuardEndMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
+	UFUNCTION()
+	void OnLockOnTurnMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 protected: // Jump / Movement Helpers
 	void ApplyRunningStateToAnimInstance(bool bNewIsRunning);
 	void SetupMeshAndCollision();
@@ -226,6 +229,12 @@ protected: // Jump / Movement Helpers
 	void UpdateMovementSpeed(float DeltaTime);
 	void UpdateCharacterRotationForCurrentCameraMode(float DeltaTime);
 	void UpdateJumpStartAnimTrigger(float DeltaTime);
+	void TryStartLockOnTurn();
+	void CancelLockOnTurn(float BlendOutTime = -1.f);
+	bool CanStartLockOnTurn() const;
+	bool IsLockOnTurnPlaying() const;
+	float GetLockOnTargetYawDelta() const;
+	UAnimMontage* ChooseLockOnTurnMontage(float YawDelta) const;
 	float GetCurrentRunMoveSpeed() const;
 	FRotator GetJumpLaunchBasisRotation() const;
 	FVector BuildJumpLaunchVelocity(const FVector2D& MoveInput) const;
@@ -286,6 +295,9 @@ protected: // External References
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dodge")
 	TObjectPtr<class UAnimMontage> CurrentDodgeMontage;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "LockOn")
+	TObjectPtr<class UAnimMontage> CurrentLockOnTurnMontage;
+
 protected: // Runtime Camera State
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	EJunCameraMode CameraMode = EJunCameraMode::Free;
@@ -307,6 +319,9 @@ protected: // Runtime Camera State
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|LockOn")
 	FVector CachedLockOnTargetPoint = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera|LockOn")
+	bool bLockOnTurnInProgress = false;
 
 protected: // Runtime Combat / Defense State
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BasicAttack")
@@ -572,6 +587,18 @@ protected: // Camera Tuning
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
 	float LockOnTargetXYIgnoreThreshold = 5.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
+	float LockOnTurnStartAngle = 55.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
+	float LockOnTurn180Threshold = 135.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
+	float LockOnTurnMaxGroundSpeed = 10.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
+	float LockOnTurnCancelBlendOutTime = 0.12f;
+
 protected: // Attack / Defense Tuning
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target")
 	float AttackFacingAssistDuration = 0.3f;
@@ -765,6 +792,18 @@ protected: // Animation Assets
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dodge|LockOn")
 	TObjectPtr<class UAnimMontage> LockOnDodgeLeftMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "LockOn")
+	TObjectPtr<class UAnimMontage> LockOnTurnLeft90Montage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "LockOn")
+	TObjectPtr<class UAnimMontage> LockOnTurnRight90Montage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "LockOn")
+	TObjectPtr<class UAnimMontage> LockOnTurnLeft180Montage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "LockOn")
+	TObjectPtr<class UAnimMontage> LockOnTurnRight180Montage;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Guard")
 	TObjectPtr<class UAnimMontage> GuardStartMontage;

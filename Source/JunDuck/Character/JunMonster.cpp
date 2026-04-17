@@ -2,6 +2,7 @@
 #include "AI/JunAIController.h"
 #include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/Engine.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "JunGameplayTags.h"
 #include "Kismet/GameplayStatics.h"
@@ -10,6 +11,32 @@
 #include "Weapon/WeaponActor.h"
 
 // Engine lifecycle / external API
+
+namespace
+{
+	const TCHAR* GetMonsterStateDebugText(EMonsterState State)
+	{
+		switch (State)
+		{
+		case EMonsterState::Idle:
+			return TEXT("Idle");
+		case EMonsterState::Patrol:
+			return TEXT("Patrol");
+		case EMonsterState::Chase:
+			return TEXT("Chase");
+		case EMonsterState::Return:
+			return TEXT("Return");
+		case EMonsterState::BattleStart:
+			return TEXT("BattleStart");
+		case EMonsterState::Combat:
+			return TEXT("Combat");
+		case EMonsterState::Dead:
+			return TEXT("Dead");
+		default:
+			return TEXT("Unknown");
+		}
+	}
+}
 
 AJunMonster::AJunMonster()
 {
@@ -31,7 +58,7 @@ AJunMonster::AJunMonster()
 
 	// 캐릭터 몸체가 이동 방향에 맞춰서 회전하게끔함
 	GetCharacterMovement()->bOrientRotationToMovement = true;
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 640.f, 0.f);
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 350.f, 0.f);
 }
 
 void AJunMonster::BeginPlay()
@@ -59,6 +86,42 @@ void AJunMonster::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (GEngine)
+	{
+		FString DebugText = FString::Printf(
+			TEXT("Monster State: %s"),
+			GetMonsterStateDebugText(CurrentState)
+		);
+
+		if (CurrentState == EMonsterState::Return)
+		{
+			const float ReturnDist = FVector::Dist2D(GetActorLocation(), ReturnTargetLocation);
+			DebugText += FString::Printf(
+				TEXT("\nReturnDist: %.1f  ReachedDist: %.1f\nReturnTarget: %s\nCurrent: %s"),
+				ReturnDist,
+				GetEffectiveReturnReachedDistance(),
+				*ReturnTargetLocation.ToCompactString(),
+				*GetActorLocation().ToCompactString()
+			);
+		}
+
+		GEngine->AddOnScreenDebugMessage(
+			static_cast<uint64>(reinterpret_cast<UPTRINT>(this)),
+			0.f,
+			FColor::Yellow,
+			DebugText
+		);
+	}
+
+	if (bDebugFreezeMovement)
+	{
+		StopAIMovement();
+		GetCharacterMovement()->StopMovementImmediately();
+		SetDesiredMoveAxes(0.f, 0.f);
+		CombatMoveInput = FVector2D::ZeroVector;
+		return;
+	}
+
 	GetCharacterMovement()->MaxWalkSpeed = GetDesiredMaxWalkSpeed();
 	bIsRunning = ShouldUseRunLocomotion();
 	UpdateAttack(DeltaTime);
@@ -73,10 +136,14 @@ void AJunMonster::HandlePatrolMoveCompleted(bool bSuccess)
 {
 	if (CurrentState == EMonsterState::Return)
 	{
-		bIsSearching = true;
+		if (HasReachedReturnTarget())
+		{
+			bIsSearching = true;
 
-		// 수색 시간 시작
-		SetMonsterState(EMonsterState::Idle);
+			// 수색 시간 시작
+			SetMonsterState(EMonsterState::Idle);
+		}
+
 		return;
 	}
 
@@ -164,7 +231,7 @@ bool AJunMonster::IsGuardOn() const
 
 bool AJunMonster::IsInCombat()
 {
-	return CurrentState == EMonsterState::Combat;
+	return CurrentState == EMonsterState::BattleStart || CurrentState == EMonsterState::Combat;
 }
 
 bool AJunMonster::IsAttacking()
@@ -318,6 +385,8 @@ void AJunMonster::EnterPatrolState()
 	bIsHasTarget = false;
 	bSprintRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
+	bHasPendingStateAfterCombatTurn = false;
+	PendingStateAfterCombatTurn = EMonsterState::Idle;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	ChooseNextPatrolLocation();
 	MoveToLocation(PatrolTargetLocation);
@@ -327,6 +396,8 @@ void AJunMonster::EnterChaseState()
 {
 	bIsHasTarget = false;
 	CombatMoveInput = FVector2D::ZeroVector;
+	bHasPendingStateAfterCombatTurn = false;
+	PendingStateAfterCombatTurn = EMonsterState::Idle;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	bSprintRequested = false;
 
@@ -340,29 +411,49 @@ void AJunMonster::EnterBattleStartState()
 {
 	bIsHasTarget = (CurrentTarget != nullptr);
 	bSprintRequested = false;
-	CombatMoveCooldown = 0.f;
 	CombatMoveInput = FVector2D::ZeroVector;
+	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = false;
+
+	const FVector Velocity2D = FVector(GetVelocity().X, GetVelocity().Y, 0.f);
+	if (!Velocity2D.IsNearlyZero())
+	{
+		const FVector Forward = GetActorForwardVector();
+		const FVector Right = GetActorRightVector();
+		BattleStartInitialMoveForward = FVector::DotProduct(Velocity2D.GetSafeNormal(), Forward);
+		BattleStartInitialMoveRight = FVector::DotProduct(Velocity2D.GetSafeNormal(), Right);
+	}
+	else
+	{
+		BattleStartInitialMoveForward = DesiredMoveForward;
+		BattleStartInitialMoveRight = DesiredMoveRight;
+	}
+
+	BattleStartMoveBlendRemainTime = BattleStartMoveBlendDuration;
 	StopAIMovement();
-	SetDesiredMoveAxes(0.f, 0.f);
 }
 
 void AJunMonster::EnterReturnState()
 {
 	bIsHasTarget = false;
 	bSprintRequested = false;
-	CombatMoveCooldown = 0.f;
 	CombatMoveInput = FVector2D::ZeroVector;
+	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = true;
-	MoveToLocation(LastKnownTargetLocation);
+	if (!TryResolveReachableLocationToward(LastKnownTargetLocation, ReturnTargetLocation))
+	{
+		ReturnTargetLocation = HomeLocation;
+	}
+
+	MoveToLocation(ReturnTargetLocation, ReturnAcceptRadius);
 }
 
 void AJunMonster::EnterCombatState()
 {
 	bIsHasTarget = (CurrentTarget != nullptr);
 	bSprintRequested = false;
-	CombatMoveCooldown = 0.f;
 	CombatMoveInput = FVector2D::ZeroVector;
+	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	StopAIMovement();
 }
@@ -371,8 +462,9 @@ void AJunMonster::EnterDeadState()
 {
 	bIsHasTarget = false;
 	bSprintRequested = false;
-	CombatMoveCooldown = 0.f;
 	CombatMoveInput = FVector2D::ZeroVector;
+	CancelCombatTurn();
+	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	AddGameplayTag(JunGameplayTags::State_Condition_Dead);
 	StopAIMovement();
@@ -428,6 +520,12 @@ void AJunMonster::UpdateIdle(float DeltaTime)
 	if (CurrentTarget)
 	{
 		bIsSearching = false;
+
+		if (TryStartTurnTowardsTargetThenState(EMonsterState::Chase))
+		{
+			return;
+		}
+
 		SetMonsterState(EMonsterState::Chase);
 		return;
 	}
@@ -455,6 +553,11 @@ void AJunMonster::UpdatePatrol(float DeltaTime)
 
 	if (CurrentTarget)
 	{
+		if (TryStartTurnTowardsTargetThenState(EMonsterState::Chase))
+		{
+			return;
+		}
+
 		SetMonsterState(EMonsterState::Chase);
 		return;
 	}
@@ -486,6 +589,7 @@ void AJunMonster::UpdateChase(float DeltaTime)
 	if (DistToTarget <= AIData.BattleStartRange)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Enter BattleStart Range"));
+		GetCharacterMovement()->bOrientRotationToMovement = false;
 		StopAIMovement();
 		SetMonsterState(EMonsterState::BattleStart);
 		return;
@@ -519,12 +623,33 @@ void AJunMonster::UpdateBattleStart(float DeltaTime)
 
 	// BattleStart는 전투 시작 연출/준비용 짧은 중간 상태다.
 	// 실제 공격/전투 이동은 아직 하지 않고, 바라보기와 대기만 담당한다.
+	UpdateBattleStartMovementBlend(DeltaTime);
 	UpdateCombatFacing(DeltaTime);
 
 	if (StateTime >= BattleStartDuration)
 	{
 		SetMonsterState(EMonsterState::Combat);
 	}
+}
+
+void AJunMonster::UpdateBattleStartMovementBlend(float DeltaTime)
+{
+	if (BattleStartMoveBlendRemainTime <= 0.f)
+	{
+		SetDesiredMoveAxes(0.f, 0.f);
+		return;
+	}
+
+	BattleStartMoveBlendRemainTime = FMath::Max(0.f, BattleStartMoveBlendRemainTime - DeltaTime);
+
+	const float BlendAlpha = BattleStartMoveBlendDuration > 0.f
+		? (BattleStartMoveBlendRemainTime / BattleStartMoveBlendDuration)
+		: 0.f;
+
+	SetDesiredMoveAxes(
+		BattleStartInitialMoveForward * BlendAlpha,
+		BattleStartInitialMoveRight * BlendAlpha
+	);
 }
 
 void AJunMonster::UpdateReturn(float DeltaTime)
@@ -537,6 +662,15 @@ void AJunMonster::UpdateReturn(float DeltaTime)
 		SetMonsterState(EMonsterState::Chase);
 		return;
 	}
+
+	if (HasReachedReturnTarget())
+	{
+		bIsSearching = true;
+		SetMonsterState(EMonsterState::Idle);
+		return;
+	}
+
+	MoveToLocation(ReturnTargetLocation, ReturnAcceptRadius);
 }
 
 void AJunMonster::UpdateCombat(float DeltaTime)
@@ -564,17 +698,214 @@ void AJunMonster::UpdateCombat(float DeltaTime)
 	if (CanAttackTarget())
 	{
 		TryAttack();
-		return;
 	}
-
-	UpdateCombatMovement(DeltaTime);
 }
 
 // Combat helpers
 
+void AJunMonster::TryStartCombatTurn()
+{
+	TryStartCombatTurnWithThreshold(CombatTurnStartAngle);
+}
+
+bool AJunMonster::TryStartTurnTowardsTargetThenState(EMonsterState NextState)
+{
+	if (!CanStartGenericTurnTowardsTarget())
+	{
+		return false;
+	}
+
+	const float YawDelta = GetCombatTargetYawDelta();
+	if (FMath::Abs(YawDelta) < CombatTurnStartAngle)
+	{
+		return false;
+	}
+
+	UAnimInstance* MonsterAnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!MonsterAnimInstance)
+	{
+		return false;
+	}
+
+	UAnimMontage* TurnMontage = ChooseCombatTurnMontage(YawDelta);
+	if (!TurnMontage)
+	{
+		return false;
+	}
+
+	MonsterAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+	MonsterAnimInstance->OnMontageEnded.AddDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+
+	if (MonsterAnimInstance->Montage_Play(TurnMontage) <= 0.f)
+	{
+		MonsterAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+		return false;
+	}
+
+	StopAIMovement();
+	CombatMoveInput = FVector2D::ZeroVector;
+	SetDesiredMoveAxes(0.f, 0.f);
+	CurrentCombatTurnMontage = TurnMontage;
+	PendingStateAfterCombatTurn = NextState;
+	bHasPendingStateAfterCombatTurn = true;
+	bCombatTurnInProgress = true;
+	return true;
+}
+
+bool AJunMonster::CanStartGenericTurnTowardsTarget() const
+{
+	if (!CurrentTarget || bCombatTurnInProgress)
+	{
+		return false;
+	}
+
+	if (bIsAttacking || IsInHitReact() || CurrentState == EMonsterState::Dead)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool AJunMonster::CanStartCombatTurn() const
+{
+	if (!CurrentTarget || bCombatTurnInProgress)
+	{
+		return false;
+	}
+
+	if (CurrentState != EMonsterState::BattleStart &&
+		CurrentState != EMonsterState::Combat)
+	{
+		return false;
+	}
+
+	if (bIsAttacking || IsInHitReact() || CurrentState == EMonsterState::Dead)
+	{
+		return false;
+	}
+
+	return GetVelocity().Size2D() <= CombatTurnMaxGroundSpeed;
+}
+
+bool AJunMonster::TryStartCombatTurnWithThreshold(float MinimumTurnAngle)
+{
+	if (!CanStartCombatTurn())
+	{
+		return false;
+	}
+
+	UAnimInstance* MonsterAnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!MonsterAnimInstance)
+	{
+		return false;
+	}
+
+	const float YawDelta = GetCombatTargetYawDelta();
+	if (FMath::Abs(YawDelta) < MinimumTurnAngle)
+	{
+		return false;
+	}
+
+	UAnimMontage* TurnMontage = ChooseCombatTurnMontage(YawDelta);
+	if (!TurnMontage)
+	{
+		return false;
+	}
+
+	MonsterAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+	MonsterAnimInstance->OnMontageEnded.AddDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+
+	if (MonsterAnimInstance->Montage_Play(TurnMontage) <= 0.f)
+	{
+		MonsterAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+		return false;
+	}
+
+	StopAIMovement();
+	CombatMoveInput = FVector2D::ZeroVector;
+	SetDesiredMoveAxes(0.f, 0.f);
+	CurrentCombatTurnMontage = TurnMontage;
+	bCombatTurnInProgress = true;
+	return true;
+}
+
+bool AJunMonster::IsCombatTurnPlaying() const
+{
+	return bCombatTurnInProgress && CurrentCombatTurnMontage != nullptr;
+}
+
+float AJunMonster::GetCombatTargetYawDelta() const
+{
+	if (!CurrentTarget)
+	{
+		return 0.f;
+	}
+
+	FVector ToTarget = CurrentTarget->GetActorLocation() - GetActorLocation();
+	ToTarget.Z = 0.f;
+	if (ToTarget.IsNearlyZero())
+	{
+		return 0.f;
+	}
+
+	const FRotator TargetRotation = ToTarget.Rotation();
+	return FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, TargetRotation.Yaw);
+}
+
+UAnimMontage* AJunMonster::ChooseCombatTurnMontage(float YawDelta) const
+{
+	const float AbsYawDelta = FMath::Abs(YawDelta);
+	if (AbsYawDelta < CombatTurnStartAngle)
+	{
+		return nullptr;
+	}
+
+	const bool bUse180 = AbsYawDelta >= CombatTurn180Threshold;
+	const bool bTurnRight = YawDelta > 0.f;
+
+	if (bUse180)
+	{
+		return bTurnRight ? TurnRight180Montage.Get() : TurnLeft180Montage.Get();
+	}
+
+	return bTurnRight ? TurnRight90Montage.Get() : TurnLeft90Montage.Get();
+}
+
+void AJunMonster::CancelCombatTurn(float BlendOutTime)
+{
+	if (!IsCombatTurnPlaying())
+	{
+		return;
+	}
+
+	UAnimMontage* PlayingTurnMontage = CurrentCombatTurnMontage.Get();
+	bCombatTurnInProgress = false;
+	bHasPendingStateAfterCombatTurn = false;
+	CurrentCombatTurnMontage = nullptr;
+	PendingStateAfterCombatTurn = EMonsterState::Idle;
+
+	if (UAnimInstance* MonsterAnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		MonsterAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+
+		if (PlayingTurnMontage)
+		{
+			MonsterAnimInstance->Montage_Stop(BlendOutTime, PlayingTurnMontage);
+		}
+	}
+}
+
 void AJunMonster::UpdateCombatFacing(float DeltaTime)
 {
 	if (!CurrentTarget)
+	{
+		return;
+	}
+
+	TryStartCombatTurn();
+
+	if (IsCombatTurnPlaying())
 	{
 		return;
 	}
@@ -597,50 +928,6 @@ void AJunMonster::UpdateCombatFacing(float DeltaTime)
 	);
 
 	SetActorRotation(NewRotation);
-}
-
-void AJunMonster::UpdateCombatMovement(float DeltaTime)
-{
-	CombatMoveCooldown -= DeltaTime;
-	if (CombatMoveCooldown <= 0.f)
-	{
-		ChooseCombatMoveInput();
-		CombatMoveCooldown = AIData.CombatMoveInterval;
-	}
-
-	float ForwardMoveInput = CombatMoveInput.X;
-	if (CurrentTarget && ForwardMoveInput > 0.f)
-	{
-		const float DistToTarget = FVector::Dist2D(GetActorLocation(), CurrentTarget->GetActorLocation());
-		if (DistToTarget <= AIData.AttackRange)
-		{
-			ForwardMoveInput = 0.f;
-		}
-	}
-
-	if (ForwardMoveInput != 0.f)
-	{
-		AddMovementInput(GetActorForwardVector(), ForwardMoveInput);
-	}
-
-	if (CombatMoveInput.Y != 0.f)
-	{
-		AddMovementInput(GetActorRightVector(), CombatMoveInput.Y);
-	}
-}
-
-void AJunMonster::ChooseCombatMoveInput()
-{
-	static const TArray<FVector2D> CandidateInputs =
-	{
-		FVector2D(1.f, 0.f),
-		FVector2D(-1.f, 0.f),
-		FVector2D(0.f, 1.f),
-		FVector2D(0.f, -1.f)
-	};
-
-	const int32 Index = FMath::RandRange(0, CandidateInputs.Num() - 1);
-	CombatMoveInput = CandidateInputs[Index];
 }
 
 // AI / target helpers
@@ -722,12 +1009,13 @@ bool AJunMonster::CanAttackTarget() const
 		return false;
 	}
 
-	if (!CurrentTarget || !AttackMontage)
+	const FMonsterAttackSelection AttackSelection = ChooseNextAttackSelection();
+	if (!CurrentTarget || !AttackSelection.Montage)
 	{
 		return false;
 	}
 
-	if (bIsAttacking || IsInHitReact() || Is_Dead())
+	if (bIsAttacking || IsInHitReact() || Is_Dead() || IsCombatTurnPlaying())
 	{
 		return false;
 	}
@@ -738,7 +1026,7 @@ bool AJunMonster::CanAttackTarget() const
 	}
 
 	const float DistSq = FVector::DistSquared2D(GetActorLocation(), CurrentTarget->GetActorLocation());
-	return DistSq <= FMath::Square(AIData.AttackRange);
+	return DistSq <= FMath::Square(AttackSelection.AttackRange);
 }
 
 void AJunMonster::ChooseNextPatrolLocation()
@@ -787,7 +1075,7 @@ void AJunMonster::ChooseNextPatrolLocation()
 	PatrolTargetLocation = bProjected ? ProjectedLocation.Location : RandomLocation.Location;
 }
 
-void AJunMonster::MoveToLocation(const FVector& Dest)
+void AJunMonster::MoveToLocation(const FVector& Dest, float AcceptanceRadius)
 {
 	AAIController* AICon = Cast<AAIController>(GetController());
 	if (!AICon)
@@ -795,7 +1083,78 @@ void AJunMonster::MoveToLocation(const FVector& Dest)
 		return;
 	}
 
-	AICon->MoveToLocation(Dest, AIData.PatrolAcceptRadius);
+	UNavigationSystemV1* NavigationSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	if (!NavigationSystem)
+	{
+		return;
+	}
+
+	FNavLocation ProjectedLocation;
+	const bool bProjected = NavigationSystem->ProjectPointToNavigation(
+		Dest,
+		ProjectedLocation,
+		FVector(200.f, 200.f, 500.f)
+	);
+
+	if (!bProjected)
+	{
+		return;
+	}
+
+	const float ResolvedAcceptanceRadius =
+		AcceptanceRadius >= 0.f ? AcceptanceRadius : AIData.PatrolAcceptRadius;
+
+	AICon->MoveToLocation(ProjectedLocation.Location, ResolvedAcceptanceRadius);
+}
+
+bool AJunMonster::TryResolveReachableLocationToward(const FVector& DesiredLocation, FVector& OutReachableLocation) const
+{
+	UNavigationSystemV1* NavigationSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	if (!NavigationSystem)
+	{
+		return false;
+	}
+
+	const FVector StartLocation = GetActorLocation();
+	const FVector QueryExtent(100.f, 100.f, 300.f);
+	constexpr int32 NumSamples = 12;
+
+	for (int32 SampleIndex = NumSamples; SampleIndex >= 0; --SampleIndex)
+	{
+		const float Alpha = static_cast<float>(SampleIndex) / static_cast<float>(NumSamples);
+		const FVector SampleLocation = FMath::Lerp(StartLocation, DesiredLocation, Alpha);
+
+		FNavLocation ProjectedLocation;
+		if (NavigationSystem->ProjectPointToNavigation(SampleLocation, ProjectedLocation, QueryExtent))
+		{
+			OutReachableLocation = ProjectedLocation.Location;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+float AJunMonster::GetEffectiveReturnReachedDistance() const
+{
+	const float CapsuleRadius = GetCapsuleComponent()
+		? GetCapsuleComponent()->GetScaledCapsuleRadius()
+		: 0.f;
+
+	return ReturnAcceptRadius + CapsuleRadius + ReturnReachedTolerance;
+}
+
+bool AJunMonster::HasReachedReturnTarget() const
+{
+	return FVector::Dist2D(GetActorLocation(), ReturnTargetLocation) <= GetEffectiveReturnReachedDistance();
+}
+
+void AJunMonster::ResetCombatTurnState()
+{
+	bCombatTurnInProgress = false;
+	bHasPendingStateAfterCombatTurn = false;
+	CurrentCombatTurnMontage = nullptr;
+	PendingStateAfterCombatTurn = EMonsterState::Idle;
 }
 
 void AJunMonster::MoveToTarget(AActor* Target)
@@ -845,8 +1204,13 @@ void AJunMonster::TryAttack()
 		return;
 	}
 
+	const FMonsterAttackSelection AttackSelection = ChooseNextAttackSelection();
+	UAnimMontage* AttackMontageToPlay = AttackSelection.Montage.Get();
 	bIsAttacking = true;
-	AttackTime = AttackMontage ? AttackMontage->GetPlayLength() : DefaultAttackDuration;
+	CurrentAttackSelection = AttackSelection;
+	CurrentAttackMontage = AttackMontageToPlay;
+	AttackTime = AttackMontageToPlay ? AttackMontageToPlay->GetPlayLength() : DefaultAttackDuration;
+	AttackFacingRemainTime = AttackSelection.FacingDuration;
 	CombatMoveInput = FVector2D::ZeroVector;
 
 	AddGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
@@ -855,9 +1219,9 @@ void AJunMonster::TryAttack()
 	StopAIMovement();
 	SetDesiredMoveAxes(0.f, 0.f);
 
-	if (AttackMontage)
+	if (AttackMontageToPlay)
 	{
-		PlayAnimMontage(AttackMontage);
+		PlayAnimMontage(AttackMontageToPlay);
 	}
 }
 
@@ -873,8 +1237,21 @@ void AJunMonster::UpdateAttack(float DeltaTime)
 		return;
 	}
 
-	// 공격 몽타주 중에도 타겟을 계속 바라보게 해서 추적감이 끊기지 않게 한다.
-	if (CurrentTarget)
+	if (IsCombatTurnPlaying())
+	{
+		return;
+	}
+
+	if (AttackFacingRemainTime > 0.f)
+	{
+		AttackFacingRemainTime = FMath::Max(0.f, AttackFacingRemainTime - DeltaTime);
+	}
+
+	const bool bCanFaceDuringAttack =
+		CurrentAttackSelection.bFaceTargetDuringAttack &&
+		(AttackFacingRemainTime > 0.f || CurrentAttackSelection.FacingDuration < 0.f);
+
+	if (bCanFaceDuringAttack && CurrentTarget)
 	{
 		FVector ToTarget = CurrentTarget->GetActorLocation() - GetActorLocation();
 		ToTarget.Z = 0.f;
@@ -887,12 +1264,14 @@ void AJunMonster::UpdateAttack(float DeltaTime)
 				CurrentRotation,
 				TargetRotation,
 				DeltaTime,
-				CombatFacingInterpSpeed
+				CurrentAttackSelection.FacingInterpSpeed
 			);
 
 			SetActorRotation(NewRotation);
 		}
 	}
+
+	OnAttackTick(DeltaTime);
 
 	AttackTime -= DeltaTime;
 	if (AttackTime <= 0.f)
@@ -910,10 +1289,75 @@ void AJunMonster::FinishAttack()
 
 	bIsAttacking = false;
 	AttackTime = 0.f;
+	AttackFacingRemainTime = 0.f;
 	AttackCooldownRemainTime = AttackCooldownDuration;
 
 	RemoveGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
 	RemoveGameplayTag(JunGameplayTags::State_Block_Move);
+
+	if (CurrentAttackSelection.bTryTurnAfterAttack)
+	{
+		TryStartPostAttackTurn();
+	}
+
+	CurrentAttackMontage = nullptr;
+	CurrentAttackSelection = FMonsterAttackSelection();
+}
+
+FMonsterAttackSelection AJunMonster::ChooseNextAttackSelection() const
+{
+	FMonsterAttackSelection Selection;
+	Selection.Montage = AttackMontage;
+	Selection.AttackRange = DefaultAttackRange;
+	Selection.bFaceTargetDuringAttack = true;
+	Selection.FacingDuration = -1.f;
+	Selection.FacingInterpSpeed = AttackFacingInterpSpeed;
+	Selection.bTryTurnAfterAttack = false;
+	Selection.PostAttackTurnStartAngle = CombatTurnStartAngle;
+	return Selection;
+}
+
+bool AJunMonster::TryStartPostAttackTurn()
+{
+	return TryStartCombatTurnWithThreshold(CurrentAttackSelection.PostAttackTurnStartAngle);
+}
+
+void AJunMonster::OnAttackTick(float DeltaTime)
+{
+}
+
+UAnimMontage* AJunMonster::GetCurrentAttackMontage() const
+{
+	return CurrentAttackMontage.Get();
+}
+
+const FMonsterAttackSelection& AJunMonster::GetCurrentAttackSelection() const
+{
+	return CurrentAttackSelection;
+}
+
+void AJunMonster::OnCombatTurnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != CurrentCombatTurnMontage)
+	{
+		return;
+	}
+
+	if (UAnimInstance* MonsterAnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		MonsterAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunMonster::OnCombatTurnMontageEnded);
+	}
+
+	bCombatTurnInProgress = false;
+	CurrentCombatTurnMontage = nullptr;
+
+	if (bHasPendingStateAfterCombatTurn)
+	{
+		const EMonsterState NextState = PendingStateAfterCombatTurn;
+		bHasPendingStateAfterCombatTurn = false;
+		PendingStateAfterCombatTurn = EMonsterState::Idle;
+		SetMonsterState(NextState);
+	}
 }
 
 // Weapon
@@ -996,6 +1440,7 @@ void AJunMonster::StartHitReact(EHitReactType NewHitReact, ECharacterHitReactDir
 	AddGameplayTag(JunGameplayTags::State_Condition_HitReact);
 	AddGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
 
+	CancelCombatTurn();
 	StopAIMovement();
 
 	if (UAnimMontage* HitReactMontage = GetHitReactMontage(NewHitReact, NewHitDirection))

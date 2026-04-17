@@ -265,6 +265,7 @@ void AJunPlayer::UpdateCharacterRotationForCurrentCameraMode(float DeltaTime)
 {
 	if (bLockOnActive)
 	{
+		TryStartLockOnTurn();
 		UpdateLockOnCharacterRotation(DeltaTime);
 	}
 	else
@@ -279,6 +280,131 @@ void AJunPlayer::UpdateJumpStartAnimTrigger(float DeltaTime)
 	{
 		JumpStartAnimTriggerRemainTime = FMath::Max(0.f, JumpStartAnimTriggerRemainTime - DeltaTime);
 	}
+}
+
+void AJunPlayer::TryStartLockOnTurn()
+{
+	if (!CanStartLockOnTurn())
+	{
+		return;
+	}
+
+	UAnimInstance* PlayerAnimInstance = GetPlayerAnimInstance();
+	if (!PlayerAnimInstance)
+	{
+		return;
+	}
+
+	const float YawDelta = GetLockOnTargetYawDelta();
+	UAnimMontage* TurnMontage = ChooseLockOnTurnMontage(YawDelta);
+	if (!TurnMontage)
+	{
+		return;
+	}
+
+	PlayerAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnLockOnTurnMontageEnded);
+	PlayerAnimInstance->OnMontageEnded.AddDynamic(this, &AJunPlayer::OnLockOnTurnMontageEnded);
+
+	if (PlayerAnimInstance->Montage_Play(TurnMontage) <= 0.f)
+	{
+		PlayerAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnLockOnTurnMontageEnded);
+		return;
+	}
+
+	CurrentLockOnTurnMontage = TurnMontage;
+	bLockOnTurnInProgress = true;
+}
+
+void AJunPlayer::CancelLockOnTurn(float BlendOutTime)
+{
+	if (!IsLockOnTurnPlaying())
+	{
+		return;
+	}
+
+	const float ResolvedBlendOutTime =
+		BlendOutTime >= 0.f ? BlendOutTime : LockOnTurnCancelBlendOutTime;
+	UAnimMontage* PlayingTurnMontage = CurrentLockOnTurnMontage.Get();
+	bLockOnTurnInProgress = false;
+	CurrentLockOnTurnMontage = nullptr;
+
+	if (UAnimInstance* PlayerAnimInstance = GetPlayerAnimInstance())
+	{
+		PlayerAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnLockOnTurnMontageEnded);
+
+		if (PlayingTurnMontage)
+		{
+			PlayerAnimInstance->Montage_Stop(ResolvedBlendOutTime, PlayingTurnMontage);
+		}
+	}
+}
+
+bool AJunPlayer::CanStartLockOnTurn() const
+{
+	if (!bLockOnActive || !LockOnTarget || bLockOnTurnInProgress)
+	{
+		return false;
+	}
+
+	if (DefenseState != EJunDefenseState::None)
+	{
+		return false;
+	}
+
+	if (bIsBasicAttacking || (GetCharacterMovement() && GetCharacterMovement()->IsFalling()))
+	{
+		return false;
+	}
+
+	if (HasGameplayTag(JunGameplayTags::State_Action_Dodge) ||
+		HasGameplayTag(JunGameplayTags::State_Condition_HitReact))
+	{
+		return false;
+	}
+
+	return GetVelocity().Size2D() <= LockOnTurnMaxGroundSpeed;
+}
+
+bool AJunPlayer::IsLockOnTurnPlaying() const
+{
+	return bLockOnTurnInProgress && CurrentLockOnTurnMontage != nullptr;
+}
+
+float AJunPlayer::GetLockOnTargetYawDelta() const
+{
+	if (!LockOnTarget)
+	{
+		return 0.f;
+	}
+
+	FVector ToTarget = LockOnTarget->GetActorLocation() - GetActorLocation();
+	ToTarget.Z = 0.f;
+	if (ToTarget.IsNearlyZero())
+	{
+		return 0.f;
+	}
+
+	const FRotator TargetRotation = ToTarget.Rotation();
+	return FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, TargetRotation.Yaw);
+}
+
+UAnimMontage* AJunPlayer::ChooseLockOnTurnMontage(float YawDelta) const
+{
+	const float AbsYawDelta = FMath::Abs(YawDelta);
+	if (AbsYawDelta < LockOnTurnStartAngle)
+	{
+		return nullptr;
+	}
+
+	const bool bUse180 = AbsYawDelta >= LockOnTurn180Threshold;
+	const bool bTurnRight = YawDelta > 0.f;
+
+	if (bUse180)
+	{
+		return bTurnRight ? LockOnTurnRight180Montage.Get() : LockOnTurnLeft180Montage.Get();
+	}
+
+	return bTurnRight ? LockOnTurnRight90Montage.Get() : LockOnTurnLeft90Montage.Get();
 }
 
 float AJunPlayer::GetCurrentRunMoveSpeed() const
@@ -340,6 +466,7 @@ void AJunPlayer::Jump()
 		return;
 	}
 
+	CancelLockOnTurn();
 	JumpStartAnimTriggerRemainTime = JumpStartAnimTriggerDuration;
 
 	const FVector2D MoveInput(DesiredMoveForward, DesiredMoveRight);
@@ -405,6 +532,7 @@ void AJunPlayer::BasicAttack()
 
 	if (!bIsBasicAttacking)
 	{
+		CancelLockOnTurn();
 		StartBasicAttack();
 		return;
 	}
@@ -431,6 +559,8 @@ void AJunPlayer::StartDodge()
 	{
 		return;
 	}
+
+	CancelLockOnTurn();
 
 	// 援щⅤ湲곕뒗 ?낅젰 異⑸룎????븘???곹깭 ?쒓렇瑜?癒쇱? ?좉렐 ??紐쏀?二쇰? ?쒖옉?쒕떎.
 	// ?먯쑀 移대찓?쇰뒗 ?낅젰 諛⑺뼢?쇰줈 罹먮┃?곕? 癒쇱? 留욎텛怨?
@@ -526,6 +656,8 @@ void AJunPlayer::OnDefenseStarted()
 	{
 		return;
 	}
+
+	CancelLockOnTurn();
 
 	if (GetCharacterMovement()->IsFalling())
 	{
@@ -939,6 +1071,12 @@ void AJunPlayer::SetDesiredMoveAxes(float NewForward, float NewRight)
 {
 	PendingMoveForward = FMath::Clamp(NewForward, -1.f, 1.f);
 	PendingMoveRight = FMath::Clamp(NewRight, -1.f, 1.f);
+
+	if ((!FMath::IsNearlyZero(PendingMoveForward) || !FMath::IsNearlyZero(PendingMoveRight)) &&
+		IsLockOnTurnPlaying())
+	{
+		CancelLockOnTurn();
+	}
 
 	if (bDeferGuardMoveInput)
 	{
@@ -1559,6 +1697,22 @@ void AJunPlayer::OnDodgeMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 	{
 		FinishDodgeState();
 	}
+}
+
+void AJunPlayer::OnLockOnTurnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != CurrentLockOnTurnMontage)
+	{
+		return;
+	}
+
+	if (UAnimInstance* PlayerAnimInstance = GetPlayerAnimInstance())
+	{
+		PlayerAnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnLockOnTurnMontageEnded);
+	}
+
+	bLockOnTurnInProgress = false;
+	CurrentLockOnTurnMontage = nullptr;
 }
 
 void AJunPlayer::AlignActorToDesiredMoveDirectionForDodge()
@@ -2765,6 +2919,7 @@ void AJunPlayer::EndLockOn()
 	LockOnTarget = nullptr;
 	CameraMode = EJunCameraMode::Free;
 	CachedLockOnTargetPoint = FVector::ZeroVector;
+	CancelLockOnTurn(0.05f);
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 }
@@ -2839,7 +2994,7 @@ void AJunPlayer::UpdateLockOnCamera(float DeltaTime)
 
 void AJunPlayer::UpdateLockOnCharacterRotation(float DeltaTime)
 {
-	if (!bLockOnActive || !LockOnTarget)
+	if (!bLockOnActive || !LockOnTarget || IsLockOnTurnPlaying())
 	{
 		return;
 	}

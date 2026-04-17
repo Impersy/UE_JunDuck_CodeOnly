@@ -45,10 +45,10 @@ struct FMonsterAIData
 	float PatrolAcceptRadius = 30.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
-	float DetectRange = 500.f;
+	float DetectRange = 800.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
-	float LoseTargetRange = 1000.f;
+	float LoseTargetRange = 2500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
 	float ChaseMoveAcceptanceRadius = 110.f;
@@ -57,13 +57,34 @@ struct FMonsterAIData
 	float BattleStartRange = 220.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
-	float CombatBreakRange = 1200.f;
+	float CombatBreakRange = 3500.f;
+};
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
-	float CombatMoveInterval = 1.5f;
+USTRUCT(BlueprintType)
+struct FMonsterAttackSelection
+{
+	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	TObjectPtr<class UAnimMontage> Montage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	float AttackRange = 250.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	bool bFaceTargetDuringAttack = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	float FacingDuration = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	float FacingInterpSpeed = 8.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	bool bTryTurnAfterAttack = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	float PostAttackTurnStartAngle = 55.f;
 };
 
 UCLASS()
@@ -112,7 +133,7 @@ protected:
 	void EnterChaseState();
 	void EnterBattleStartState();
 	void EnterReturnState();
-	void EnterCombatState();
+	virtual void EnterCombatState();
 	void EnterDeadState();
 
 	void Update_State(float DeltaTime);
@@ -121,12 +142,25 @@ protected:
 	void UpdateChase(float DeltaTime);
 	void UpdateBattleStart(float DeltaTime);
 	void UpdateReturn(float DeltaTime);
-	void UpdateCombat(float DeltaTime);
+	virtual void UpdateCombat(float DeltaTime);
+	void UpdateBattleStartMovementBlend(float DeltaTime);
 	void UpdateCombatFacing(float DeltaTime);
-	void UpdateCombatMovement(float DeltaTime);
-	void ChooseCombatMoveInput();
+	void TryStartCombatTurn();
+	bool TryStartTurnTowardsTargetThenState(EMonsterState NextState);
+	bool CanStartGenericTurnTowardsTarget() const;
+	bool CanStartCombatTurn() const;
+	bool IsCombatTurnPlaying() const;
+	float GetCombatTargetYawDelta() const;
+	UAnimMontage* ChooseCombatTurnMontage(float YawDelta) const;
+	void CancelCombatTurn(float BlendOutTime = 0.05f);
 	void UpdateAttack(float DeltaTime);
 	void FinishAttack();
+	virtual FMonsterAttackSelection ChooseNextAttackSelection() const;
+	virtual bool TryStartPostAttackTurn();
+	virtual void OnAttackTick(float DeltaTime);
+	UAnimMontage* GetCurrentAttackMontage() const;
+	const FMonsterAttackSelection& GetCurrentAttackSelection() const;
+	bool TryStartCombatTurnWithThreshold(float MinimumTurnAngle);
 
 protected:
 	// AI / target helpers used by the state machine.
@@ -136,11 +170,15 @@ protected:
 	bool CanRemainInCombat(AActor* Target) const;
 	bool CanAttackTarget() const;
 	void ChooseNextPatrolLocation();
-	void MoveToLocation(const FVector& Dest);
+	void MoveToLocation(const FVector& Dest, float AcceptanceRadius = -1.f);
 	void MoveToTarget(AActor* Target);
 	void StartChase(AActor* NewTarget);
 	void StopAIMovement();
 	void TryAttack();
+	bool TryResolveReachableLocationToward(const FVector& DesiredLocation, FVector& OutReachableLocation) const;
+	float GetEffectiveReturnReachedDistance() const;
+	bool HasReachedReturnTarget() const;
+	void ResetCombatTurnState();
 
 protected:
 	// Weapon lifecycle helper.
@@ -173,6 +211,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI")
 	float BattleStartDuration = 0.5f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI")
+	float BattleStartMoveBlendDuration = 0.4f;
+
 protected:
 	// Runtime references cached after spawn / detection.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Target")
@@ -201,14 +242,26 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Return")
 	FVector LastKnownTargetLocation = FVector::ZeroVector;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Return")
+	FVector ReturnTargetLocation = FVector::ZeroVector;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Return")
 	float SearchWaitTime = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Return")
+	float ReturnAcceptRadius = 120.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Return")
+	float ReturnReachedTolerance = 15.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Return")
 	bool bIsSearching = false;
 
 protected:
 	// Combat / movement runtime flags and transient values.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+	bool bDebugFreezeMovement = false;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	bool bIsGuardOn = false;
 
@@ -216,10 +269,19 @@ protected:
 	bool bIsAttacking = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bCombatTurnInProgress = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bHasPendingStateAfterCombatTurn = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	float AttackTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	float AttackCooldownRemainTime = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	float AttackFacingRemainTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Target")
 	bool bIsHasTarget = false;
@@ -230,11 +292,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	bool bSprintRequested = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
-	float CombatMoveCooldown = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	float CombatFacingInterpSpeed = 2.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
-	float CombatFacingInterpSpeed = 8.f;
+	float AttackFacingInterpSpeed = 8.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	float CombatTurnStartAngle = 55.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	float CombatTurn180Threshold = 135.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+	float CombatTurnMaxGroundSpeed = 10.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	FVector2D CombatMoveInput = FVector2D::ZeroVector;
@@ -244,6 +315,21 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	float DesiredMoveRight = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	float BattleStartInitialMoveForward = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	float BattleStartInitialMoveRight = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	float BattleStartMoveBlendRemainTime = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<class UAnimMontage> CurrentCombatTurnMontage = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	EMonsterState PendingStateAfterCombatTurn = EMonsterState::Idle;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float WalkMoveSpeed = 250.f;
@@ -259,14 +345,38 @@ protected:
 
 protected:
 	// Test attack setup for simple "in range -> attack montage" behavior.
+	UFUNCTION()
+	void OnCombatTurnMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack")
 	TObjectPtr<class UAnimMontage> AttackMontage = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attack")
+	TObjectPtr<class UAnimMontage> CurrentAttackMontage = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attack")
+	FMonsterAttackSelection CurrentAttackSelection;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn")
+	TObjectPtr<class UAnimMontage> TurnLeft90Montage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn")
+	TObjectPtr<class UAnimMontage> TurnRight90Montage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn")
+	TObjectPtr<class UAnimMontage> TurnLeft180Montage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn")
+	TObjectPtr<class UAnimMontage> TurnRight180Montage = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	float DefaultAttackDuration = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	float AttackCooldownDuration = 1.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
+	float DefaultAttackRange = 250.f;
 
 protected:
 	// Designer-assigned weapon setup.

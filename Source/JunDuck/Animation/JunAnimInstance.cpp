@@ -103,6 +103,20 @@ void UJunAnimInstance::UpdateMovementDirectionData(float DeltaSeconds)
 	{
 		TargetLocalMoveForward = Monster->GetDesiredMoveForward();
 		TargetLocalMoveRight = Monster->GetDesiredMoveRight();
+
+		if (FMath::IsNearlyZero(TargetLocalMoveForward) && FMath::IsNearlyZero(TargetLocalMoveRight))
+		{
+			FVector HorizontalVelocity = Velocity;
+			HorizontalVelocity.Z = 0.f;
+
+			if (!HorizontalVelocity.IsNearlyZero())
+			{
+				const FVector MoveDir = HorizontalVelocity.GetSafeNormal();
+
+				TargetLocalMoveForward = FVector::DotProduct(Character->GetActorForwardVector(), MoveDir);
+				TargetLocalMoveRight = FVector::DotProduct(Character->GetActorRightVector(), MoveDir);
+			}
+		}
 	}
 	else
 	{
