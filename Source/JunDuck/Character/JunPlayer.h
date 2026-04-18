@@ -222,6 +222,7 @@ protected: // Jump / Movement Helpers
 	void SetupMeshAndCollision();
 	void SetupCameraComponents();
 	void SetupMovementDefaults();
+	void UpdateCameraAnchor(float DeltaTime);
 	void CacheDefaultMovementBrakingSettings();
 	void RestoreDefaultMovementBrakingSettings();
 	void TryInitializeCameraRotationFromController();
@@ -270,6 +271,9 @@ protected: // Camera
 	FVector GetFilteredLockOnTargetPoint();
 
 protected: // Components
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<class USceneComponent> CameraAnchor;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<class USpringArmComponent> SpringArm;
 
@@ -534,6 +538,12 @@ protected: // Runtime Movement / Jump State
 
 protected: // Camera Tuning
 	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	float CameraAnchorInterpSpeed = 14.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
+	float CameraAnchorDodgeInterpSpeed = 7.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera")
 	float SpringArmLocationInterpSpeed = 8.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera")
@@ -748,19 +758,19 @@ protected: // Attack / Defense Tuning
 
 protected: // Movement / Jump Tuning
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float WalkMoveSpeed = 350.f;
+	float WalkMoveSpeed = 250.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float FreeRunMoveSpeed = 725.f;
+	float FreeRunMoveSpeed = 700.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float LockOnRunMoveSpeed = 550.f;
+	float LockOnRunMoveSpeed = 500.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float SprintMoveSpeed = 900.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float GuardMoveSpeed = 250.f;
+	float GuardMoveSpeed = 180.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float MoveSpeedInterpRate = 12.f;

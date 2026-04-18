@@ -26,7 +26,6 @@ enum class EMonsterMoveState : uint8
 {
 	Walk,
 	Run,
-	Sprint,
 	Guard
 };
 
@@ -278,9 +277,6 @@ protected:
 	float AttackTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
-	float AttackCooldownRemainTime = 0.f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	float AttackFacingRemainTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Target")
@@ -290,7 +286,7 @@ protected:
 	bool bIsRunning = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
-	bool bSprintRequested = false;
+	bool bRunLocomotionRequested = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
 	float CombatFacingInterpSpeed = 2.f;
@@ -335,13 +331,10 @@ protected:
 	float WalkMoveSpeed = 250.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float RunMoveSpeed = 550.f;
+	float RunMoveSpeed = 500.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float SprintMoveSpeed = 725.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float GuardMoveSpeed = 250.f;
+	float GuardMoveSpeed = 180.f;
 
 protected:
 	// Test attack setup for simple "in range -> attack montage" behavior.
@@ -371,9 +364,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	float DefaultAttackDuration = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
-	float AttackCooldownDuration = 1.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack")
 	float DefaultAttackRange = 250.f;

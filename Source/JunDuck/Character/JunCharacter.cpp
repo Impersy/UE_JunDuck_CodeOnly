@@ -85,6 +85,11 @@ void AJunCharacter::EndAttackTraceWindow()
 {
 }
 
+FVector AJunCharacter::GetLockOnTargetPoint() const
+{
+	return GetActorLocation() + FVector(0.f, 0.f, 40.f);
+}
+
 bool AJunCharacter::HasGameplayTag(FGameplayTag Tag) const
 {
 	return OwnedGameplayTags.HasTag(Tag);

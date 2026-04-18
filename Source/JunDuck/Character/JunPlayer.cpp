@@ -1,7 +1,8 @@
 #include "Character/JunPlayer.h"
-#include "GameFramework/SpringArmComponent.h"
+#include "Camera/JunSpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Weapon/WeaponActor.h"
 #include "JunGameplayTags.h"
@@ -34,16 +35,21 @@ void AJunPlayer::SetupCameraComponents()
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
-	SpringArm->SetupAttachment(GetCapsuleComponent());
+	CameraAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("CameraAnchor"));
+	CameraAnchor->SetupAttachment(GetCapsuleComponent());
+	CameraAnchor->SetUsingAbsoluteLocation(true);
+	CameraAnchor->SetRelativeLocation(FVector::ZeroVector);
+
+	SpringArm = CreateDefaultSubobject<UJunSpringArmComponent>(TEXT("SpringArm"));
+	SpringArm->SetupAttachment(CameraAnchor);
 	SpringArm->SetRelativeLocationAndRotation(FVector(0.f, 0.f, 60.f), FRotator(-20.0f, 0, 0));
 	SpringArm->TargetArmLength = 300.f;
 	SpringArm->bUsePawnControlRotation = true;
 	SpringArm->bInheritPitch = true;
 	SpringArm->bInheritYaw = true;
 	SpringArm->bInheritRoll = false;
-	SpringArm->bEnableCameraLag = true;
-	SpringArm->CameraLagSpeed = 7.f;
+	SpringArm->bEnableCameraLag = false;
+	SpringArm->CameraLagSpeed = 12.f;
 	SpringArm->bEnableCameraRotationLag = false;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
@@ -77,6 +83,11 @@ void AJunPlayer::BeginPlay()
 	GetPlayerAnimInstance();
 	CacheDefaultMovementBrakingSettings();
 	TryInitializeCameraRotationFromController();
+
+	if (CameraAnchor)
+	{
+		CameraAnchor->SetWorldLocation(GetCapsuleComponent()->GetComponentLocation());
+	}
 }
 
 void AJunPlayer::Tick(float DeltaTime)
@@ -84,6 +95,7 @@ void AJunPlayer::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	TryInitializeCameraRotationFromController();
+	UpdateCameraAnchor(DeltaTime);
 
 	ValidateLockOnTarget();
 
@@ -106,6 +118,28 @@ void AJunPlayer::Tick(float DeltaTime)
 	UpdatePlayerHitState(DeltaTime);
 
 	UpdateJumpStartAnimTrigger(DeltaTime);
+}
+
+void AJunPlayer::UpdateCameraAnchor(float DeltaTime)
+{
+	if (!CameraAnchor || !GetCapsuleComponent())
+	{
+		return;
+	}
+
+	const FVector TargetAnchorLocation = GetCapsuleComponent()->GetComponentLocation();
+	const float InterpSpeed = HasGameplayTag(JunGameplayTags::State_Action_Dodge)
+		? CameraAnchorDodgeInterpSpeed
+		: CameraAnchorInterpSpeed;
+
+	const FVector NewAnchorLocation = FMath::VInterpTo(
+		CameraAnchor->GetComponentLocation(),
+		TargetAnchorLocation,
+		DeltaTime,
+		InterpSpeed
+	);
+
+	CameraAnchor->SetWorldLocation(NewAnchorLocation);
 }
 
 void AJunPlayer::UpdateMovementBraking(float DeltaTime)
@@ -2815,8 +2849,6 @@ void AJunPlayer::EndAttackFacingAssist()
 
 void AJunPlayer::UpdateJunCamera(float DeltaTime)
 {
-	// 移대찓?쇰뒗 "?꾩옱 紐⑤뱶蹂??뚯쟾/??湲몄씠"? "?곹솴蹂?異붽? ?ㅽ봽?????⑹꽦?댁꽌 寃곗젙?쒕떎.
-	// ?? ?먯쑀/?쎌삩 湲곕낯 ?ㅽ봽??+ ?먯쑀 移대찓??援щⅤ湲?蹂댁젙.
 	switch (CameraMode)
 	{
 	case EJunCameraMode::LockOn:
@@ -2830,7 +2862,6 @@ void AJunPlayer::UpdateJunCamera(float DeltaTime)
 
 	FVector TargetSocketOffset = bLockOnActive ? LockOnCameraSocketOffset : FreeCameraSocketOffset;
 
-	// ?먯쑀 移대찓??援щⅤ湲곕쭔 移대찓?쇰? ?댁쭩 ??떠 ?띾룄媛먯쓣 以??
 	if (!bLockOnActive && HasGameplayTag(JunGameplayTags::State_Action_Dodge))
 	{
 		TargetSocketOffset += DodgeCameraSocketOffset;
@@ -2943,7 +2974,9 @@ void AJunPlayer::UpdateLockOnCamera(float DeltaTime)
 		return;
 	}
 
-	FVector CameraBasePoint = GetActorLocation();
+	FVector CameraBasePoint = CameraAnchor
+		? CameraAnchor->GetComponentLocation()
+		: GetActorLocation();
 	CameraBasePoint.Z += 50.f;
 
 	const FVector TargetBonePoint = GetFilteredLockOnTargetPoint();
@@ -3056,8 +3089,12 @@ FVector AJunPlayer::GetRawLockOnCapsulePoint() const
 
 FVector AJunPlayer::GetFilteredLockOnTargetPoint()
 {
-	
 	FVector RawPoint = GetRawLockOnCapsulePoint();
+	if (LockOnTarget)
+	{
+		const FVector TargetLockOnPoint = LockOnTarget->GetLockOnTargetPoint();
+		RawPoint.Z = TargetLockOnPoint.Z;
+	}
 	
 	if (CachedLockOnTargetPoint.IsNearlyZero())
 	{

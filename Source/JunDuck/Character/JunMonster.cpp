@@ -247,7 +247,7 @@ bool AJunMonster::IsRunning() const
 bool AJunMonster::ShouldUseRunLocomotion() const
 {
 	const EMonsterMoveState MoveState = GetMoveState();
-	return MoveState == EMonsterMoveState::Run || MoveState == EMonsterMoveState::Sprint;
+	return MoveState == EMonsterMoveState::Run;
 }
 
 EMonsterState AJunMonster::GetCurrentState() const
@@ -262,9 +262,9 @@ EMonsterMoveState AJunMonster::GetMoveState() const
 		return EMonsterMoveState::Guard;
 	}
 
-	if (bSprintRequested)
+	if (bRunLocomotionRequested)
 	{
-		return EMonsterMoveState::Sprint;
+		return EMonsterMoveState::Run;
 	}
 
 	return EMonsterMoveState::Walk;
@@ -291,8 +291,6 @@ float AJunMonster::GetDesiredMaxWalkSpeed() const
 	{
 	case EMonsterMoveState::Guard:
 		return GuardMoveSpeed;
-	case EMonsterMoveState::Sprint:
-		return SprintMoveSpeed;
 	case EMonsterMoveState::Run:
 		return RunMoveSpeed;
 	case EMonsterMoveState::Walk:
@@ -373,7 +371,7 @@ void AJunMonster::SetMonsterState(EMonsterState NewState)
 void AJunMonster::EnterIdleState()
 {
 	bIsHasTarget = false;
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	StopAIMovement();
@@ -383,7 +381,7 @@ void AJunMonster::EnterIdleState()
 void AJunMonster::EnterPatrolState()
 {
 	bIsHasTarget = false;
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
 	bHasPendingStateAfterCombatTurn = false;
 	PendingStateAfterCombatTurn = EMonsterState::Idle;
@@ -399,7 +397,7 @@ void AJunMonster::EnterChaseState()
 	bHasPendingStateAfterCombatTurn = false;
 	PendingStateAfterCombatTurn = EMonsterState::Idle;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 
 	if (CurrentTarget)
 	{
@@ -410,7 +408,7 @@ void AJunMonster::EnterChaseState()
 void AJunMonster::EnterBattleStartState()
 {
 	bIsHasTarget = (CurrentTarget != nullptr);
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
 	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -436,7 +434,7 @@ void AJunMonster::EnterBattleStartState()
 void AJunMonster::EnterReturnState()
 {
 	bIsHasTarget = false;
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
 	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -451,7 +449,7 @@ void AJunMonster::EnterReturnState()
 void AJunMonster::EnterCombatState()
 {
 	bIsHasTarget = (CurrentTarget != nullptr);
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
 	ResetCombatTurnState();
 	GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -461,7 +459,7 @@ void AJunMonster::EnterCombatState()
 void AJunMonster::EnterDeadState()
 {
 	bIsHasTarget = false;
-	bSprintRequested = false;
+	bRunLocomotionRequested = false;
 	CombatMoveInput = FVector2D::ZeroVector;
 	CancelCombatTurn();
 	ResetCombatTurnState();
@@ -622,9 +620,9 @@ void AJunMonster::UpdateBattleStart(float DeltaTime)
 	}
 
 	// BattleStart는 전투 시작 연출/준비용 짧은 중간 상태다.
-	// 실제 공격/전투 이동은 아직 하지 않고, 바라보기와 대기만 담당한다.
+	// 실제 공격/전투 이동은 아직 하지 않고, 필요한 경우 Turn만 허용한다.
 	UpdateBattleStartMovementBlend(DeltaTime);
-	UpdateCombatFacing(DeltaTime);
+	TryStartCombatTurn();
 
 	if (StateTime >= BattleStartDuration)
 	{
@@ -910,6 +908,16 @@ void AJunMonster::UpdateCombatFacing(float DeltaTime)
 		return;
 	}
 
+	const bool bHasDesiredMoveInput =
+		!FMath::IsNearlyZero(DesiredMoveForward) ||
+		!FMath::IsNearlyZero(DesiredMoveRight);
+	const bool bHasMovementVelocity = GetVelocity().Size2D() > 3.f;
+
+	if (!bHasDesiredMoveInput && !bHasMovementVelocity)
+	{
+		return;
+	}
+
 	FVector ToTarget = CurrentTarget->GetActorLocation() - GetActorLocation();
 	ToTarget.Z = 0.f;
 
@@ -1016,11 +1024,6 @@ bool AJunMonster::CanAttackTarget() const
 	}
 
 	if (bIsAttacking || IsInHitReact() || Is_Dead() || IsCombatTurnPlaying())
-	{
-		return false;
-	}
-
-	if (AttackCooldownRemainTime > 0.f)
 	{
 		return false;
 	}
@@ -1227,11 +1230,6 @@ void AJunMonster::TryAttack()
 
 void AJunMonster::UpdateAttack(float DeltaTime)
 {
-	if (AttackCooldownRemainTime > 0.f)
-	{
-		AttackCooldownRemainTime = FMath::Max(0.f, AttackCooldownRemainTime - DeltaTime);
-	}
-
 	if (!bIsAttacking)
 	{
 		return;
@@ -1290,7 +1288,6 @@ void AJunMonster::FinishAttack()
 	bIsAttacking = false;
 	AttackTime = 0.f;
 	AttackFacingRemainTime = 0.f;
-	AttackCooldownRemainTime = AttackCooldownDuration;
 
 	RemoveGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
 	RemoveGameplayTag(JunGameplayTags::State_Block_Move);

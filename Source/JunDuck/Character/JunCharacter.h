@@ -76,6 +76,8 @@ public:
 
 	virtual void EndAttackTraceWindow();
 
+	virtual FVector GetLockOnTargetPoint() const;
+
 public:
 	UFUNCTION(BlueprintCallable)
 	bool HasGameplayTag(FGameplayTag Tag) const;
