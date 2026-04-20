@@ -17,7 +17,7 @@
 AJunPlayer::AJunPlayer()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
+	
 	SetupMeshAndCollision();
 	SetupCameraComponents();
 	SetupMovementDefaults();
@@ -45,13 +45,15 @@ void AJunPlayer::SetupCameraComponents()
 	SpringArm->SetRelativeLocationAndRotation(FVector(0.f, 0.f, 60.f), FRotator(-20.0f, 0, 0));
 	SpringArm->TargetArmLength = 300.f;
 	SpringArm->bUsePawnControlRotation = true;
+
 	SpringArm->bInheritPitch = true;
 	SpringArm->bInheritYaw = true;
 	SpringArm->bInheritRoll = false;
-	SpringArm->bEnableCameraLag = false;
-	SpringArm->CameraLagSpeed = 12.f;
-	SpringArm->bEnableCameraRotationLag = false;
 
+	SpringArm->bEnableCameraLag = true;
+	SpringArm->bEnableCameraRotationLag = false;
+	SpringArm->CameraLagSpeed = 15.f;
+	
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm);
 }

@@ -44,7 +44,7 @@ struct FMonsterAIData
 	float PatrolAcceptRadius = 30.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
-	float DetectRange = 800.f;
+	float DetectRange = 1000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
 	float LoseTargetRange = 2500.f;
@@ -53,7 +53,7 @@ struct FMonsterAIData
 	float ChaseMoveAcceptanceRadius = 110.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
-	float BattleStartRange = 220.f;
+	float BattleStartRange = 400.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MonsterAIData")
 	float CombatBreakRange = 3500.f;
@@ -191,6 +191,7 @@ protected:
 	void EndHitReact();
 	bool IsInHitReact() const;
 	bool CanBeInterruptedBy(EHitReactType IncomingHitReact) const;
+	virtual bool ShouldStartHitReact(EHitReactType IncomingHitReact) const;
 	float GetHitReactDuration(EHitReactType HitType) const;
 	ECharacterHitReactDirection DetermineHitReactDirection(const FVector& SwingDirection) const;
 	UAnimMontage* GetHitReactMontage(EHitReactType HitType, ECharacterHitReactDirection HitDirection) const;

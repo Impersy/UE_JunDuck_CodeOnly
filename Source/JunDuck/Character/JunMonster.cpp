@@ -214,6 +214,11 @@ void AJunMonster::ReceiveHit(EHitReactType HitType, float DamageAmount, AActor* 
 		}
 	}
 
+	if (!ShouldStartHitReact(HitType))
+	{
+		return;
+	}
+
 	// 피격 반응 선택은 "누가 때렸는가"보다 "무기가 어느 방향으로 지나갔는가"가 더 중요하다.
 	// 그래서 데미지 적용 뒤에 SwingDirection 기반으로 좌/우/정면 반응을 다시 판정한다.
 	StartHitReact(HitType, DetermineHitReactDirection(SwingDirection));
@@ -569,6 +574,15 @@ void AJunMonster::UpdateChase(float DeltaTime)
 		return;
 	}
 
+	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
+	if (TargetCharacter && TargetCharacter->Is_Dead())
+	{
+		CurrentTarget = nullptr;
+		bIsHasTarget = false;
+		SetMonsterState(EMonsterState::Idle);
+		return;
+	}
+
 	// 유지 범위 체크 (DetectRange 아님)
 	if (!CanKeepTarget(CurrentTarget))
 	{
@@ -607,6 +621,15 @@ void AJunMonster::UpdateBattleStart(float DeltaTime)
 	if (!CurrentTarget)
 	{
 		SetMonsterState(EMonsterState::Patrol);
+		return;
+	}
+
+	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
+	if (TargetCharacter && TargetCharacter->Is_Dead())
+	{
+		CurrentTarget = nullptr;
+		bIsHasTarget = false;
+		SetMonsterState(EMonsterState::Idle);
 		return;
 	}
 
@@ -676,6 +699,16 @@ void AJunMonster::UpdateCombat(float DeltaTime)
 	if (!CurrentTarget)
 	{
 		SetMonsterState(EMonsterState::Patrol);
+		return;
+	}
+
+	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
+	if (TargetCharacter && TargetCharacter->Is_Dead())
+	{
+		CurrentTarget = nullptr;
+		bIsHasTarget = false;
+		CombatMoveInput = FVector2D::ZeroVector;
+		SetMonsterState(EMonsterState::Idle);
 		return;
 	}
 
@@ -978,6 +1011,12 @@ bool AJunMonster::CanDetectTarget(AActor* Target) const
 		return false;
 	}
 
+	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(Target);
+	if (TargetCharacter && TargetCharacter->Is_Dead())
+	{
+		return false;
+	}
+
 	const float DistSq = FVector::DistSquared(GetActorLocation(), Target->GetActorLocation());
 	return DistSq <= FMath::Square(AIData.DetectRange);
 }
@@ -985,6 +1024,12 @@ bool AJunMonster::CanDetectTarget(AActor* Target) const
 bool AJunMonster::CanKeepTarget(AActor* Target) const
 {
 	if (!Target)
+	{
+		return false;
+	}
+
+	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(Target);
+	if (TargetCharacter && TargetCharacter->Is_Dead())
 	{
 		return false;
 	}
@@ -1178,9 +1223,20 @@ void AJunMonster::StartChase(AActor* NewTarget)
 		return;
 	}
 
-	// 이미 같은 타겟이면 중복 전환 방지
-	if (CurrentTarget == NewTarget && CurrentState == EMonsterState::Chase)
+	// 이미 같은 타겟을 상위 전투 상태에서 추적/전투 중이면 상태를 되감지 않는다.
+	if (CurrentTarget == NewTarget &&
+		(CurrentState == EMonsterState::Chase ||
+		 CurrentState == EMonsterState::BattleStart ||
+		 CurrentState == EMonsterState::Combat))
 	{
+		return;
+	}
+
+	// 전투 중에 새 타겟 갱신이 와도, 전투 유지 가능 범위라면 현재 상위 상태를 유지한다.
+	if (CurrentState == EMonsterState::BattleStart || CurrentState == EMonsterState::Combat)
+	{
+		CurrentTarget = NewTarget;
+		bIsHasTarget = true;
 		return;
 	}
 
@@ -1495,6 +1551,11 @@ bool AJunMonster::CanBeInterruptedBy(EHitReactType IncomingHitReact) const
 	}
 
 	return true;
+}
+
+bool AJunMonster::ShouldStartHitReact(EHitReactType IncomingHitReact) const
+{
+	return IncomingHitReact != EHitReactType::None;
 }
 
 float AJunMonster::GetHitReactDuration(EHitReactType HitType) const

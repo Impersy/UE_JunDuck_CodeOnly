@@ -5,6 +5,7 @@
 #include "Character/JunMonster.h"
 #include "Character/JunPlayer.h"
 #include "JunGameplayTags.h"
+#include "Engine/Engine.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Character.h"
 
@@ -115,7 +116,33 @@ void UJunAnimInstance::UpdateMovementDirectionData(float DeltaSeconds)
 
 				TargetLocalMoveForward = FVector::DotProduct(Character->GetActorForwardVector(), MoveDir);
 				TargetLocalMoveRight = FVector::DotProduct(Character->GetActorRightVector(), MoveDir);
+
+				// Combat strafe often comes from AI/path velocity instead of explicit desired input.
+				// Clamp pure lateral fallback so the locomotion BS does not jump to full side input.
+				if (FMath::Abs(TargetLocalMoveRight) > FMath::Abs(TargetLocalMoveForward))
+				{
+					TargetLocalMoveRight = FMath::Clamp(TargetLocalMoveRight, -0.5f, 0.5f);
+				}
 			}
+		}
+
+		if (GEngine)
+		{
+			const float ResolvedDesiredRight = FMath::Clamp(Monster->GetDesiredMoveRight(), -0.3f, 0.3f);
+			const FString DebugText = FString::Printf(
+				TEXT("MonsterMove DesiredR: %.2f / ResolvedR: %.2f / TargetR: %.2f / LocalR: %.2f"),
+				Monster->GetDesiredMoveRight(),
+				ResolvedDesiredRight,
+				TargetLocalMoveRight,
+				LocalMoveRight
+			);
+
+			GEngine->AddOnScreenDebugMessage(
+				static_cast<uint64>(reinterpret_cast<UPTRINT>(Monster)) + 3000,
+				0.f,
+				FColor::Green,
+				DebugText
+			);
 		}
 	}
 	else
