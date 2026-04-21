@@ -118,32 +118,11 @@ void UJunAnimInstance::UpdateMovementDirectionData(float DeltaSeconds)
 				TargetLocalMoveRight = FVector::DotProduct(Character->GetActorRightVector(), MoveDir);
 
 				// Combat strafe often comes from AI/path velocity instead of explicit desired input.
-				// Clamp pure lateral fallback so the locomotion BS does not jump to full side input.
-				if (FMath::Abs(TargetLocalMoveRight) > FMath::Abs(TargetLocalMoveForward))
-				{
-					TargetLocalMoveRight = FMath::Clamp(TargetLocalMoveRight, -0.5f, 0.5f);
-				}
+				// Clamp lateral fallback locomotion input so the BS does not jump to full side input.
+				TargetLocalMoveRight = FMath::Clamp(TargetLocalMoveRight, -0.4f, 0.4f);
 			}
 		}
 
-		if (GEngine)
-		{
-			const float ResolvedDesiredRight = FMath::Clamp(Monster->GetDesiredMoveRight(), -0.3f, 0.3f);
-			const FString DebugText = FString::Printf(
-				TEXT("MonsterMove DesiredR: %.2f / ResolvedR: %.2f / TargetR: %.2f / LocalR: %.2f"),
-				Monster->GetDesiredMoveRight(),
-				ResolvedDesiredRight,
-				TargetLocalMoveRight,
-				LocalMoveRight
-			);
-
-			GEngine->AddOnScreenDebugMessage(
-				static_cast<uint64>(reinterpret_cast<UPTRINT>(Monster)) + 3000,
-				0.f,
-				FColor::Green,
-				DebugText
-			);
-		}
 	}
 	else
 	{

@@ -1,10 +1,9 @@
 
-
-
 #include "Weapon/WeaponActor.h"
 #include "Character/JunCharacter.h"
 #include "Character/JunMonster.h"
 #include "Character/JunPlayer.h"
+#include "DrawDebugHelpers.h"
 
 // Sets default values
 AWeaponActor::AWeaponActor()
@@ -47,6 +46,14 @@ void AWeaponActor::Tick(float DeltaTime)
 	{
 		UpdateAttackTrace();
 	}
+	else if (bShowAttackTraceDebugAlways && TraceStartPoint && TraceEndPoint)
+	{
+		DrawAttackTraceDebug(
+			TraceStartPoint->GetComponentLocation(),
+			TraceEndPoint->GetComponentLocation(),
+			false
+		);
+	}
 }
 
 void AWeaponActor::StartAttackTrace()
@@ -75,9 +82,18 @@ void AWeaponActor::StopAttackTrace()
 	HitActors.Empty();
 }
 
+void AWeaponActor::SetTraceSampleCount(const int32 NewTraceSampleCount)
+{
+	TraceSampleCount = FMath::Max(2, NewTraceSampleCount);
+}
+
+void AWeaponActor::SetAttackHitReactType(const EHitReactType NewHitReactType)
+{
+	AttackHitReactType = NewHitReactType;
+}
+
 void AWeaponActor::UpdateAttackTrace()
 {
-
 	if (!TraceStartPoint || !TraceEndPoint)
 	{
 		return;
@@ -97,6 +113,10 @@ void AWeaponActor::UpdateAttackTrace()
 	TSet<AActor*> CurrentFrameHitActors;
 
 	const int32 SampleCount = FMath::Max(2, TraceSampleCount);
+	if (bShowAttackTraceSweepDebug)
+	{
+		DrawAttackTraceDebug(CurrentTraceStart, CurrentTraceEnd, true, PrevTraceStart, PrevTraceEnd);
+	}
 
 	for (int32 i = 0; i < SampleCount; ++i)
 	{
@@ -116,10 +136,6 @@ void AWeaponActor::UpdateAttackTrace()
 			FCollisionShape::MakeSphere(TraceRadius),
 			QueryParams
 		);
-
-		// 디버그용
-		DrawDebugLine(GetWorld(), PrevSamplePoint, CurrSamplePoint, FColor::Yellow, false, 0.05f, 0, 1.0f);
-		DrawDebugSphere(GetWorld(), CurrSamplePoint, TraceRadius, 12, FColor::Cyan, false, 0.05f);
 
 		if (!bHit)
 		{
@@ -168,6 +184,38 @@ void AWeaponActor::UpdateAttackTrace()
 
 }
 
+void AWeaponActor::DrawAttackTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const bool bSweepDebug, const FVector& PrevStart, const FVector& PrevEnd) const
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	const int32 SampleCount = FMath::Max(2, TraceSampleCount);
+
+	if (!bSweepDebug)
+	{
+		DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 0.f, 0, 1.0f);
+	}
+
+	for (int32 i = 0; i < SampleCount; ++i)
+	{
+		const float Alpha = static_cast<float>(i) / static_cast<float>(SampleCount - 1);
+		const FVector CurrSamplePoint = FMath::Lerp(TraceStart, TraceEnd, Alpha);
+
+		if (bSweepDebug)
+		{
+			const FVector PrevSamplePoint = FMath::Lerp(PrevStart, PrevEnd, Alpha);
+			DrawDebugLine(GetWorld(), PrevSamplePoint, CurrSamplePoint, FColor::Yellow, false, 0.05f, 0, 1.0f);
+			DrawDebugSphere(GetWorld(), CurrSamplePoint, TraceRadius, 12, FColor::Cyan, false, 0.05f);
+		}
+		else
+		{
+			DrawDebugSphere(GetWorld(), CurrSamplePoint, TraceRadius, 12, FColor::Cyan, false, 0.f);
+		}
+	}
+}
+
 void AWeaponActor::ApplyDamageToHitCharacter(AActor* HitActor, const FVector& SwingDirection)
 {
 	AJunCharacter* VictimCharacter = Cast<AJunCharacter>(HitActor);   // 맞은 대상
@@ -213,11 +261,11 @@ void AWeaponActor::ApplyDamageToHitCharacter(AActor* HitActor, const FVector& Sw
 
 		if (HitMonster)
 		{
-			HitMonster->ReceiveHit(EHitReactType::LightHit, BasicDamage, AttackerCharacter, SwingDirection);
+			HitMonster->ReceiveHit(AttackHitReactType, BasicDamage, AttackerCharacter, SwingDirection);
 		}
 		else if (AJunPlayer* HitPlayer = Cast<AJunPlayer>(VictimCharacter))
 		{
-			HitPlayer->ReceiveHit(EHitReactType::LightHit, BasicDamage, AttackerCharacter, SwingDirection);
+			HitPlayer->ReceiveHit(AttackHitReactType, BasicDamage, AttackerCharacter, SwingDirection);
 		}
 		else
 		{

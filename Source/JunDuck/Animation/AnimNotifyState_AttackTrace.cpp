@@ -24,7 +24,7 @@ void UAnimNotifyState_AttackTrace::NotifyBegin(USkeletalMeshComponent* MeshComp,
 		return;
 	}
 
-	Character->BeginAttackTraceWindow();
+	Character->BeginAttackTraceWindow(HitReactType);
 }
 
 void UAnimNotifyState_AttackTrace::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)

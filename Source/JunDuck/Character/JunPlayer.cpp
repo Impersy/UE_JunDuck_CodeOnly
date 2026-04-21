@@ -393,7 +393,7 @@ bool AJunPlayer::CanStartLockOnTurn() const
 	}
 
 	if (HasGameplayTag(JunGameplayTags::State_Action_Dodge) ||
-		HasGameplayTag(JunGameplayTags::State_Condition_HitReact))
+		HasGameplayTag(JunGameplayTags::State_Condition_ControlLocked))
 	{
 		return false;
 	}
@@ -539,13 +539,14 @@ void AJunPlayer::HandleGameplayEventNotify(FGameplayTag EventTag)
 	}
 }
 
-void AJunPlayer::BeginAttackTraceWindow()
+void AJunPlayer::BeginAttackTraceWindow(EHitReactType HitReactType)
 {
 	if (!EquippedWeapon)
 	{
 		return;
 	}
 
+	EquippedWeapon->SetAttackHitReactType(HitReactType);
 	EquippedWeapon->StartAttackTrace();
 }
 
@@ -688,7 +689,7 @@ void AJunPlayer::OnDefenseStarted()
 		return;
 	}
 
-	if (HasGameplayTag(JunGameplayTags::State_Condition_HitReact))
+	if (HasGameplayTag(JunGameplayTags::State_Condition_ControlLocked))
 	{
 		return;
 	}
@@ -1191,7 +1192,7 @@ void AJunPlayer::ReceiveHit(EHitReactType HitType, float DamageAmount, AActor* D
 		{
 			return;
 		}
-		StartHitReact(HitType, DetermineHitReactDirection(SwingDirection));
+		StartHitReact(HitType, DetermineHitReactDirection(DamageCauser, SwingDirection));
 		return;
 	}
 }
@@ -1967,6 +1968,13 @@ EJunPlayerHitResolveResult AJunPlayer::ResolveIncomingHitResult(EHitReactType In
 
 bool AJunPlayer::CanBeInterruptedBy(EHitReactType IncomingHitType) const
 {
+	auto IsHeavyHitType = [](const EHitReactType HitType)
+	{
+		return HitType == EHitReactType::HeavyHit_A
+			|| HitType == EHitReactType::HeavyHit_B
+			|| HitType == EHitReactType::HeavyHit_C;
+	};
+
 	if (CurrentHitState == EJunPlayerHitState::None)
 	{
 		return true;
@@ -1987,13 +1995,13 @@ bool AJunPlayer::CanBeInterruptedBy(EHitReactType IncomingHitType) const
 		return true;
 	}
 
-	if (CurrentHitReactType == EHitReactType::HeavyHit &&
+	if (IsHeavyHitType(CurrentHitReactType) &&
 		IncomingHitType == EHitReactType::LightHit)
 	{
 		return false;
 	}
 
-	if (IncomingHitType == EHitReactType::HeavyHit)
+	if (IsHeavyHitType(IncomingHitType) || IncomingHitType == EHitReactType::LargeHit)
 	{
 		return true;
 	}
@@ -2007,26 +2015,60 @@ bool AJunPlayer::CanBeInterruptedBy(EHitReactType IncomingHitType) const
 	return CurrentHitReactType == EHitReactType::None;
 }
 
-ECharacterHitReactDirection AJunPlayer::DetermineHitReactDirection(const FVector& SwingDirection) const
+ECharacterHitReactDirection AJunPlayer::DetermineHitReactDirection(const AActor* DamageCauser, const FVector& SwingDirection) const
 {
-	const FVector SafeSwingDirection = SwingDirection.GetSafeNormal();
-	if (SafeSwingDirection.IsNearlyZero())
+	auto ResolveFrontSwingDirection = [this, &SwingDirection]()
 	{
+		const FVector SafeSwingDirection = SwingDirection.GetSafeNormal();
+		if (SafeSwingDirection.IsNearlyZero())
+		{
+			return ECharacterHitReactDirection::Front_F;
+		}
+
+		const FVector LocalSwingDirection = GetActorTransform().InverseTransformVectorNoScale(SafeSwingDirection);
+		const float SwingYawDegrees = FMath::RadiansToDegrees(FMath::Atan2(LocalSwingDirection.Y, LocalSwingDirection.X));
+
+		if (SwingYawDegrees > 25.f && SwingYawDegrees <= 70.f)
+		{
+			return ECharacterHitReactDirection::Front_FR;
+		}
+		if (SwingYawDegrees < -25.f && SwingYawDegrees >= -70.f)
+		{
+			return ECharacterHitReactDirection::Front_FL;
+		}
+
 		return ECharacterHitReactDirection::Front_F;
-	}
+	};
 
-	const FVector LocalSwingDirection = GetActorTransform().InverseTransformVectorNoScale(SafeSwingDirection);
-	const float SideValue = LocalSwingDirection.Y;
-	const float SideThreshold = 0.35f;
-
-	if (FMath::Abs(SideValue) >= SideThreshold)
+	if (!DamageCauser)
 	{
-		return SideValue > 0.f
-			? ECharacterHitReactDirection::Front_R
-			: ECharacterHitReactDirection::Front_L;
+		return ResolveFrontSwingDirection();
 	}
 
-	return ECharacterHitReactDirection::Front_F;
+	FVector ToAttackerLocal = GetActorTransform().InverseTransformVectorNoScale(DamageCauser->GetActorLocation() - GetActorLocation());
+	ToAttackerLocal.Z = 0.f;
+
+	if (ToAttackerLocal.IsNearlyZero())
+	{
+		return ResolveFrontSwingDirection();
+	}
+
+	const float AttackerYawDegrees = FMath::RadiansToDegrees(FMath::Atan2(ToAttackerLocal.Y, ToAttackerLocal.X));
+
+	if (AttackerYawDegrees > 60.f && AttackerYawDegrees <= 135.f)
+	{
+		return ECharacterHitReactDirection::Right_R;
+	}
+	if (AttackerYawDegrees < -60.f && AttackerYawDegrees >= -135.f)
+	{
+		return ECharacterHitReactDirection::Left_L;
+	}
+	if (AttackerYawDegrees > 135.f || AttackerYawDegrees < -135.f)
+	{
+		return ECharacterHitReactDirection::Back_B;
+	}
+
+	return ResolveFrontSwingDirection();
 }
 
 ECharacterKnockbackDirection AJunPlayer::DetermineKnockbackDirectionFromDamageCauser(const AActor* DamageCauser) const
@@ -2059,20 +2101,99 @@ ECharacterKnockbackDirection AJunPlayer::DetermineKnockbackDirectionFromDamageCa
 
 UAnimMontage* AJunPlayer::GetHitReactMontage(EHitReactType HitType, ECharacterHitReactDirection HitDirection) const
 {
-	if (HitType != EHitReactType::LightHit)
+	auto ResolveDirectionalMontage = [HitDirection](
+		UAnimMontage* BackMontage,
+		UAnimMontage* FrontMontage,
+		UAnimMontage* FrontLeftMontage,
+		UAnimMontage* FrontRightMontage,
+		UAnimMontage* LeftMontage,
+		UAnimMontage* RightMontage) -> UAnimMontage*
 	{
-		return nullptr;
-	}
+		switch (HitDirection)
+		{
+		case ECharacterHitReactDirection::Back_B:
+			return BackMontage ? BackMontage : FrontMontage;
+		case ECharacterHitReactDirection::Front_FL:
+			return FrontLeftMontage ? FrontLeftMontage : (LeftMontage ? LeftMontage : FrontMontage);
+		case ECharacterHitReactDirection::Front_FR:
+			return FrontRightMontage ? FrontRightMontage : (RightMontage ? RightMontage : FrontMontage);
+		case ECharacterHitReactDirection::Left_L:
+			return LeftMontage ? LeftMontage : (FrontLeftMontage ? FrontLeftMontage : FrontMontage);
+		case ECharacterHitReactDirection::Right_R:
+			return RightMontage ? RightMontage : (FrontRightMontage ? FrontRightMontage : FrontMontage);
+		case ECharacterHitReactDirection::Front_F:
+		default:
+			return FrontMontage;
+		}
+	};
 
-	switch (HitDirection)
+	switch (HitType)
 	{
-	case ECharacterHitReactDirection::Front_L:
-		return LightHitFront_LMontage;
-	case ECharacterHitReactDirection::Front_R:
-		return LightHitFront_RMontage;
-	case ECharacterHitReactDirection::Front_F:
+	case EHitReactType::LightHit:
+		return ResolveDirectionalMontage(
+			LightHitBackMontage,
+			LightHitFront_FMontage,
+			LightHitFront_FLMontage,
+			LightHitFront_FRMontage,
+			LightHitLeftMontage,
+			LightHitRightMontage
+		);
+	case EHitReactType::HeavyHit_A:
+		if (HitDirection == ECharacterHitReactDirection::Back_B ||
+			HitDirection == ECharacterHitReactDirection::Left_L ||
+			HitDirection == ECharacterHitReactDirection::Right_R)
+		{
+			return ResolveDirectionalMontage(
+				LargeHitBackMontage,
+				LargeHitFrontMontage,
+				LargeHitFrontLeftMontage,
+				LargeHitFrontRightMontage,
+				LargeHitLeftMontage,
+				LargeHitRightMontage
+			);
+		}
+		return HeavyHitFront_AMontage;
+	case EHitReactType::HeavyHit_B:
+		if (HitDirection == ECharacterHitReactDirection::Back_B ||
+			HitDirection == ECharacterHitReactDirection::Left_L ||
+			HitDirection == ECharacterHitReactDirection::Right_R)
+		{
+			return ResolveDirectionalMontage(
+				LargeHitBackMontage,
+				LargeHitFrontMontage,
+				LargeHitFrontLeftMontage,
+				LargeHitFrontRightMontage,
+				LargeHitLeftMontage,
+				LargeHitRightMontage
+			);
+		}
+		return HeavyHitFront_BMontage;
+	case EHitReactType::HeavyHit_C:
+		if (HitDirection == ECharacterHitReactDirection::Back_B ||
+			HitDirection == ECharacterHitReactDirection::Left_L ||
+			HitDirection == ECharacterHitReactDirection::Right_R)
+		{
+			return ResolveDirectionalMontage(
+				LargeHitBackMontage,
+				LargeHitFrontMontage,
+				LargeHitFrontLeftMontage,
+				LargeHitFrontRightMontage,
+				LargeHitLeftMontage,
+				LargeHitRightMontage
+			);
+		}
+		return HeavyHitFront_CMontage;
+	case EHitReactType::LargeHit:
+		return ResolveDirectionalMontage(
+			LargeHitBackMontage,
+			LargeHitFrontMontage,
+			LargeHitFrontLeftMontage,
+			LargeHitFrontRightMontage,
+			LargeHitLeftMontage,
+			LargeHitRightMontage
+		);
 	default:
-		return LightHitFront_FMontage;
+		return nullptr;
 	}
 }
 
@@ -2176,10 +2297,38 @@ void AJunPlayer::StartHitReact(EHitReactType HitType, ECharacterHitReactDirectio
 	if (HitType == EHitReactType::LightHit)
 	{
 		PlayerHitStateRemainTime = LightHitReactDuration;
+		PlayerHitControlLockRemainTime = LightHitControlLockDuration;
+	}
+	else if (HitType == EHitReactType::HeavyHit_A ||
+		HitType == EHitReactType::HeavyHit_B ||
+		HitType == EHitReactType::HeavyHit_C)
+	{
+		PlayerHitStateRemainTime = HitReactMontage ? HitReactMontage->GetPlayLength() : HeavyHitReactDuration;
+		switch (HitType)
+		{
+		case EHitReactType::HeavyHit_A:
+			PlayerHitControlLockRemainTime = HeavyHitAControlLockDuration;
+			break;
+		case EHitReactType::HeavyHit_B:
+			PlayerHitControlLockRemainTime = HeavyHitBControlLockDuration;
+			break;
+		case EHitReactType::HeavyHit_C:
+			PlayerHitControlLockRemainTime = HeavyHitCControlLockDuration;
+			break;
+		default:
+			PlayerHitControlLockRemainTime = HeavyHitAControlLockDuration;
+			break;
+		}
+	}
+	else if (HitType == EHitReactType::LargeHit)
+	{
+		PlayerHitStateRemainTime = HitReactMontage ? HitReactMontage->GetPlayLength() : LargeHitReactDuration;
+		PlayerHitControlLockRemainTime = LargeHitControlLockDuration;
 	}
 	else
 	{
 		PlayerHitStateRemainTime = HitReactMontage ? HitReactMontage->GetPlayLength() : HitReactDuration;
+		PlayerHitControlLockRemainTime = HitReactDuration;
 	}
 
 	AddGameplayTag(JunGameplayTags::State_Condition_HitReact);
@@ -2313,6 +2462,15 @@ void AJunPlayer::UpdatePlayerHitState(float DeltaTime)
 		}
 	}
 
+	if (PlayerHitControlLockRemainTime > 0.f)
+	{
+		PlayerHitControlLockRemainTime = FMath::Max(0.f, PlayerHitControlLockRemainTime - DeltaTime);
+		if (PlayerHitControlLockRemainTime <= 0.f)
+		{
+			ReleaseHitReactControlLock();
+		}
+	}
+
 	PlayerHitStateRemainTime = FMath::Max(0.f, PlayerHitStateRemainTime - DeltaTime);
 
 	if (PlayerHitStateRemainTime <= 0.f)
@@ -2321,10 +2479,20 @@ void AJunPlayer::UpdatePlayerHitState(float DeltaTime)
 	}
 }
 
+void AJunPlayer::ReleaseHitReactControlLock()
+{
+	RemoveGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Move);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Jump);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Attack);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Dodge);
+}
+
 void AJunPlayer::FinishPlayerHitState()
 {
 	CurrentHitState = EJunPlayerHitState::None;
 	PlayerHitStateRemainTime = 0.f;
+	PlayerHitControlLockRemainTime = 0.f;
 	ChainParryWindowRemainTime = 0.f;
 	ParrySuccessElapsedTime = 0.f;
 	CurrentHitReactType = EHitReactType::None;
@@ -2338,11 +2506,7 @@ void AJunPlayer::FinishPlayerHitState()
 	}
 
 	RemoveGameplayTag(JunGameplayTags::State_Condition_HitReact);
-	RemoveGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
-	RemoveGameplayTag(JunGameplayTags::State_Block_Move);
-	RemoveGameplayTag(JunGameplayTags::State_Block_Jump);
-	RemoveGameplayTag(JunGameplayTags::State_Block_Attack);
-	RemoveGameplayTag(JunGameplayTags::State_Block_Dodge);
+	ReleaseHitReactControlLock();
 
 	if (DefenseState == EJunDefenseState::Guarding)
 	{

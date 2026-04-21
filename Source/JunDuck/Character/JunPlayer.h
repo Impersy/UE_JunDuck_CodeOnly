@@ -90,7 +90,7 @@ public: // Engine / Character Overrides
 	virtual void Jump() override;
 	virtual void Landed(const FHitResult& Hit) override;
 	virtual void HandleGameplayEventNotify(FGameplayTag EventTag) override;
-	virtual void BeginAttackTraceWindow() override;
+	virtual void BeginAttackTraceWindow(EHitReactType HitReactType = EHitReactType::LightHit) override;
 	virtual void EndAttackTraceWindow() override;
 
 public: // External Gameplay API
@@ -167,7 +167,7 @@ protected: // Dodge
 protected: // Hit
 	EJunPlayerHitResolveResult ResolveIncomingHitResult(EHitReactType IncomingHitType) const;
 	bool CanBeInterruptedBy(EHitReactType IncomingHitType) const;
-	ECharacterHitReactDirection DetermineHitReactDirection(const FVector& SwingDirection) const;
+	ECharacterHitReactDirection DetermineHitReactDirection(const AActor* DamageCauser, const FVector& SwingDirection) const;
 	ECharacterKnockbackDirection DetermineKnockbackDirectionFromDamageCauser(const AActor* DamageCauser) const;
 	UAnimMontage* GetHitReactMontage(EHitReactType HitType, ECharacterHitReactDirection HitDirection) const;
 	UAnimMontage* GetParrySuccessMontage(const FVector& SwingDirection) const;
@@ -187,6 +187,7 @@ protected: // Hit
 	);
 	void InterruptActionsForHitReaction();
 	void UpdatePlayerHitState(float DeltaTime);
+	void ReleaseHitReactControlLock();
 	void FinishPlayerHitState();
 
 protected: // Defense
@@ -455,6 +456,9 @@ protected: // Runtime Combat / Defense State
 	float PlayerHitStateRemainTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hit")
+	float PlayerHitControlLockRemainTime = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hit")
 	float ChainParryWindowRemainTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hit")
@@ -686,7 +690,28 @@ protected: // Attack / Defense Tuning
 	float HitReactDuration = 0.5f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
-	float LightHitReactDuration = 0.22f;
+	float LightHitReactDuration = 0.6f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float LightHitControlLockDuration = 0.22f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float HeavyHitReactDuration = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float HeavyHitAControlLockDuration = 0.9f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float HeavyHitBControlLockDuration = 0.9f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float HeavyHitCControlLockDuration = 1.1f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float LargeHitReactDuration = 0.8f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	float LargeHitControlLockDuration = 0.45f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
 	float GuardBlockKnockbackStrength = 250.f;
@@ -840,13 +865,49 @@ protected: // Animation Assets
 	TObjectPtr<class UAnimMontage> GuardBlockMontage;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> HeavyHitFront_AMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> HeavyHitFront_BMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> HeavyHitFront_CMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LargeHitBackMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LargeHitFrontMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LargeHitFrontLeftMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LargeHitFrontRightMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LargeHitLeftMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LargeHitRightMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LightHitBackMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
 	TObjectPtr<class UAnimMontage> LightHitFront_FMontage;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
-	TObjectPtr<class UAnimMontage> LightHitFront_LMontage;
+	TObjectPtr<class UAnimMontage> LightHitFront_FLMontage;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
-	TObjectPtr<class UAnimMontage> LightHitFront_RMontage;
+	TObjectPtr<class UAnimMontage> LightHitFront_FRMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LightHitLeftMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hit")
+	TObjectPtr<class UAnimMontage> LightHitRightMontage;
 
 protected: // Weapon Assets
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon")

@@ -14,6 +14,75 @@
 
 namespace
 {
+	bool IsHeavyHitType(const EHitReactType HitType)
+	{
+		return HitType == EHitReactType::HeavyHit_A
+			|| HitType == EHitReactType::HeavyHit_B
+			|| HitType == EHitReactType::HeavyHit_C;
+	}
+
+	ECharacterHitReactDirection ResolveHitReactDirectionFromSwing(const AActor& CharacterActor, const FVector& SwingDirection)
+	{
+		const FVector SafeSwingDirection = SwingDirection.GetSafeNormal();
+		if (SafeSwingDirection.IsNearlyZero())
+		{
+			return ECharacterHitReactDirection::Front_F;
+		}
+
+		const FVector LocalSwingDirection = CharacterActor.GetActorTransform().InverseTransformVectorNoScale(SafeSwingDirection);
+		const float YawDegrees = FMath::RadiansToDegrees(FMath::Atan2(LocalSwingDirection.Y, LocalSwingDirection.X));
+
+		if (YawDegrees >= -25.f && YawDegrees <= 25.f)
+		{
+			return ECharacterHitReactDirection::Front_F;
+		}
+		if (YawDegrees > 25.f && YawDegrees <= 70.f)
+		{
+			return ECharacterHitReactDirection::Front_FR;
+		}
+		if (YawDegrees > 70.f && YawDegrees <= 135.f)
+		{
+			return ECharacterHitReactDirection::Right_R;
+		}
+		if (YawDegrees < -25.f && YawDegrees >= -70.f)
+		{
+			return ECharacterHitReactDirection::Front_FL;
+		}
+		if (YawDegrees < -70.f && YawDegrees >= -135.f)
+		{
+			return ECharacterHitReactDirection::Left_L;
+		}
+
+		return ECharacterHitReactDirection::Back_B;
+	}
+
+	UAnimMontage* ResolveDirectionalHitReactMontage(
+		const ECharacterHitReactDirection HitDirection,
+		UAnimMontage* BackMontage,
+		UAnimMontage* FrontMontage,
+		UAnimMontage* FrontLeftMontage,
+		UAnimMontage* FrontRightMontage,
+		UAnimMontage* LeftMontage,
+		UAnimMontage* RightMontage)
+	{
+		switch (HitDirection)
+		{
+		case ECharacterHitReactDirection::Back_B:
+			return BackMontage ? BackMontage : FrontMontage;
+		case ECharacterHitReactDirection::Front_FL:
+			return FrontLeftMontage ? FrontLeftMontage : (LeftMontage ? LeftMontage : FrontMontage);
+		case ECharacterHitReactDirection::Front_FR:
+			return FrontRightMontage ? FrontRightMontage : (RightMontage ? RightMontage : FrontMontage);
+		case ECharacterHitReactDirection::Left_L:
+			return LeftMontage ? LeftMontage : (FrontLeftMontage ? FrontLeftMontage : FrontMontage);
+		case ECharacterHitReactDirection::Right_R:
+			return RightMontage ? RightMontage : (FrontRightMontage ? FrontRightMontage : FrontMontage);
+		case ECharacterHitReactDirection::Front_F:
+		default:
+			return FrontMontage;
+		}
+	}
+
 	const TCHAR* GetMonsterStateDebugText(EMonsterState State)
 	{
 		switch (State)
@@ -89,20 +158,16 @@ void AJunMonster::Tick(float DeltaTime)
 	if (GEngine)
 	{
 		FString DebugText = FString::Printf(
-			TEXT("Monster State: %s"),
-			GetMonsterStateDebugText(CurrentState)
+			TEXT("Monster State: %s\nHp: %d / %d"),
+			GetMonsterStateDebugText(CurrentState),
+			Hp,
+			MaxHp
 		);
-
-		if (CurrentState == EMonsterState::Return)
+		const FString ExtraDebugText = GetMonsterDebugExtraText();
+		if (!ExtraDebugText.IsEmpty())
 		{
-			const float ReturnDist = FVector::Dist2D(GetActorLocation(), ReturnTargetLocation);
-			DebugText += FString::Printf(
-				TEXT("\nReturnDist: %.1f  ReachedDist: %.1f\nReturnTarget: %s\nCurrent: %s"),
-				ReturnDist,
-				GetEffectiveReturnReachedDistance(),
-				*ReturnTargetLocation.ToCompactString(),
-				*GetActorLocation().ToCompactString()
-			);
+			DebugText += TEXT("\n");
+			DebugText += ExtraDebugText;
 		}
 
 		GEngine->AddOnScreenDebugMessage(
@@ -207,8 +272,13 @@ void AJunMonster::ReceiveHit(EHitReactType HitType, float DamageAmount, AActor* 
 	// 이미 HitReact 중일 때 우선순위 간단 처리
 	if (IsInHitReact())
 	{
-		// Heavy > Light 이건 임시 처리
-		if (CurrentHitReact == EHitReactType::HeavyHit && HitType == EHitReactType::LightHit)
+		// Heavy react 중에는 Light/Large가 현재 모션을 덮지 못하게 막는다.
+		if (IsHeavyHitType(CurrentHitReact) && HitType == EHitReactType::LightHit)
+		{
+			return;
+		}
+
+		if (IsHeavyHitType(CurrentHitReact) && HitType == EHitReactType::LargeHit)
 		{
 			return;
 		}
@@ -219,9 +289,9 @@ void AJunMonster::ReceiveHit(EHitReactType HitType, float DamageAmount, AActor* 
 		return;
 	}
 
-	// 피격 반응 선택은 "누가 때렸는가"보다 "무기가 어느 방향으로 지나갔는가"가 더 중요하다.
-	// 그래서 데미지 적용 뒤에 SwingDirection 기반으로 좌/우/정면 반응을 다시 판정한다.
-	StartHitReact(HitType, DetermineHitReactDirection(SwingDirection));
+	// 먼저 공격자 위치로 F/L/R/B를 나누고,
+	// 정면 계열일 때만 스윙 방향으로 F/FL/FR를 세분화한다.
+	StartHitReact(HitType, DetermineHitReactDirection(DamageCauser, SwingDirection));
 }
 
 bool AJunMonster::HasCombatTarget()
@@ -310,13 +380,14 @@ void AJunMonster::SetDesiredMoveAxes(float NewForward, float NewRight)
 	DesiredMoveRight = FMath::Clamp(NewRight, -1.f, 1.f);
 }
 
-void AJunMonster::BeginAttackTraceWindow()
+void AJunMonster::BeginAttackTraceWindow(EHitReactType HitReactType)
 {
 	if (!EquippedWeapon)
 	{
 		return;
 	}
 
+	EquippedWeapon->SetAttackHitReactType(HitReactType);
 	EquippedWeapon->StartAttackTrace();
 }
 
@@ -328,6 +399,34 @@ void AJunMonster::EndAttackTraceWindow()
 	}
 
 	EquippedWeapon->EndAttackTrace();
+}
+
+void AJunMonster::BeginKickAttackTraceWindow(EHitReactType HitReactType)
+{
+	if (EquippedKickWeapon)
+	{
+		EquippedKickWeapon->SetAttackHitReactType(HitReactType);
+		EquippedKickWeapon->StartAttackTrace();
+	}
+
+	if (EquippedKickWeaponRight)
+	{
+		EquippedKickWeaponRight->SetAttackHitReactType(HitReactType);
+		EquippedKickWeaponRight->StartAttackTrace();
+	}
+}
+
+void AJunMonster::EndKickAttackTraceWindow()
+{
+	if (EquippedKickWeapon)
+	{
+		EquippedKickWeapon->EndAttackTrace();
+	}
+
+	if (EquippedKickWeaponRight)
+	{
+		EquippedKickWeaponRight->EndAttackTrace();
+	}
 }
 
 // Top-level state machine
@@ -472,6 +571,18 @@ void AJunMonster::EnterDeadState()
 	AddGameplayTag(JunGameplayTags::State_Condition_Dead);
 	StopAIMovement();
 	SetDesiredMoveAxes(0.f, 0.f);
+	if (EquippedWeapon)
+	{
+		EquippedWeapon->StopAttackTrace();
+	}
+	if (EquippedKickWeapon)
+	{
+		EquippedKickWeapon->StopAttackTrace();
+	}
+	if (EquippedKickWeaponRight)
+	{
+		EquippedKickWeaponRight->StopAttackTrace();
+	}
 
 	// 필요하면 죽음 몽타주 / collision 조정 / AI 비활성화
 }
@@ -1266,9 +1377,11 @@ void AJunMonster::TryAttack()
 	const FMonsterAttackSelection AttackSelection = ChooseNextAttackSelection();
 	UAnimMontage* AttackMontageToPlay = AttackSelection.Montage.Get();
 	bIsAttacking = true;
+	bAttackInterruptedByHitReact = false;
 	CurrentAttackSelection = AttackSelection;
 	CurrentAttackMontage = AttackMontageToPlay;
-	AttackTime = AttackMontageToPlay ? AttackMontageToPlay->GetPlayLength() : DefaultAttackDuration;
+	const float AttackPlayRate = FMath::Max(AttackSelection.PlayRate, KINDA_SMALL_NUMBER);
+	AttackTime = AttackMontageToPlay ? (AttackMontageToPlay->GetPlayLength() / AttackPlayRate) : DefaultAttackDuration;
 	AttackFacingRemainTime = AttackSelection.FacingDuration;
 	CombatMoveInput = FVector2D::ZeroVector;
 
@@ -1280,13 +1393,18 @@ void AJunMonster::TryAttack()
 
 	if (AttackMontageToPlay)
 	{
-		PlayAnimMontage(AttackMontageToPlay);
+		PlayAnimMontage(AttackMontageToPlay, AttackPlayRate);
 	}
 }
 
 void AJunMonster::UpdateAttack(float DeltaTime)
 {
 	if (!bIsAttacking)
+	{
+		return;
+	}
+
+	if (IsInHitReact())
 	{
 		return;
 	}
@@ -1365,6 +1483,7 @@ FMonsterAttackSelection AJunMonster::ChooseNextAttackSelection() const
 	Selection.bFaceTargetDuringAttack = true;
 	Selection.FacingDuration = -1.f;
 	Selection.FacingInterpSpeed = AttackFacingInterpSpeed;
+	Selection.PlayRate = 1.f;
 	Selection.bTryTurnAfterAttack = false;
 	Selection.PostAttackTurnStartAngle = CombatTurnStartAngle;
 	return Selection;
@@ -1377,6 +1496,11 @@ bool AJunMonster::TryStartPostAttackTurn()
 
 void AJunMonster::OnAttackTick(float DeltaTime)
 {
+}
+
+FString AJunMonster::GetMonsterDebugExtraText() const
+{
+	return FString();
 }
 
 UAnimMontage* AJunMonster::GetCurrentAttackMontage() const
@@ -1478,6 +1602,56 @@ void AJunMonster::SpawnAndAttachWeapon()
 			);
 		}
 	}
+
+	if (DefaultKickWeaponClass)
+	{
+		EquippedKickWeapon = World->SpawnActor<AWeaponActor>(
+			DefaultKickWeaponClass,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			SpawnParams
+		);
+
+		if (!EquippedKickWeapon)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to spawn monster kick weapon."));
+		}
+		else
+		{
+			EquippedKickWeapon->StopAttackTrace();
+			EquippedKickWeapon->SetTraceSampleCount(KickWeaponTraceSampleCount);
+			EquippedKickWeapon->AttachToComponent(
+				GetMesh(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+				KickWeaponSocketName
+			);
+		}
+	}
+
+	if (DefaultKickWeaponRightClass)
+	{
+		EquippedKickWeaponRight = World->SpawnActor<AWeaponActor>(
+			DefaultKickWeaponRightClass,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			SpawnParams
+		);
+
+		if (!EquippedKickWeaponRight)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to spawn monster right kick weapon."));
+		}
+		else
+		{
+			EquippedKickWeaponRight->StopAttackTrace();
+			EquippedKickWeaponRight->SetTraceSampleCount(KickWeaponTraceSampleCount);
+			EquippedKickWeaponRight->AttachToComponent(
+				GetMesh(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+				KickWeaponRightSocketName
+			);
+		}
+	}
 }
 
 // Hit react
@@ -1489,7 +1663,14 @@ void AJunMonster::StartHitReact(EHitReactType NewHitReact, ECharacterHitReactDir
 	CurrentHitReact = NewHitReact;
 	CurrentHitReactDirection = NewHitDirection;
 	HitReactTime = 0.f;
+	CurrentHitReactDuration = GetHitReactDuration(NewHitReact);
 
+	if (bIsAttacking)
+	{
+		bAttackInterruptedByHitReact = true;
+	}
+
+	RemoveGameplayTag(JunGameplayTags::State_Condition_SuperArmor);
 	AddGameplayTag(JunGameplayTags::State_Condition_HitReact);
 	AddGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
 
@@ -1498,6 +1679,11 @@ void AJunMonster::StartHitReact(EHitReactType NewHitReact, ECharacterHitReactDir
 
 	if (UAnimMontage* HitReactMontage = GetHitReactMontage(NewHitReact, NewHitDirection))
 	{
+		if (IsHeavyHitType(NewHitReact))
+		{
+			CurrentHitReactDuration = HitReactMontage->GetPlayLength();
+		}
+
 		PlayAnimMontage(HitReactMontage);
 	}
 }
@@ -1512,8 +1698,7 @@ void AJunMonster::UpdateHitReact(float DeltaTime)
 	// 현재는 몽타주 종료가 아니라 Duration 기준으로 HitReact 상태를 끝낸다.
 	HitReactTime += DeltaTime;
 
-	const float Duration = GetHitReactDuration(CurrentHitReact);
-	if (HitReactTime >= Duration)
+	if (HitReactTime >= CurrentHitReactDuration)
 	{
 		EndHitReact();
 	}
@@ -1526,6 +1711,7 @@ void AJunMonster::EndHitReact()
 	CurrentHitReact = EHitReactType::None;
 	CurrentHitReactDirection = ECharacterHitReactDirection::Front_F;
 	HitReactTime = 0.f;
+	CurrentHitReactDuration = 0.f;
 
 	RemoveGameplayTag(JunGameplayTags::State_Condition_HitReact);
 	RemoveGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
@@ -1545,9 +1731,7 @@ bool AJunMonster::CanBeInterruptedBy(EHitReactType IncomingHitReact) const
 
 	if (HasGameplayTag(JunGameplayTags::State_Condition_SuperArmor))
 	{
-		return IncomingHitReact == EHitReactType::HeavyHit
-			|| IncomingHitReact == EHitReactType::Airborne
-			|| IncomingHitReact == EHitReactType::Knockdown;
+		return IsHeavyHitType(IncomingHitReact);
 	}
 
 	return true;
@@ -1564,33 +1748,54 @@ float AJunMonster::GetHitReactDuration(EHitReactType HitType) const
 	{
 	case EHitReactType::LightHit:
 		return LightHitDuration;
-	case EHitReactType::HeavyHit:
+	case EHitReactType::HeavyHit_A:
+	case EHitReactType::HeavyHit_B:
+	case EHitReactType::HeavyHit_C:
 		return HeavyHitDuration;
+	case EHitReactType::LargeHit:
+		return LargeHitDuration;
 	default:
 		return 0.f;
 	}
 }
 
-ECharacterHitReactDirection AJunMonster::DetermineHitReactDirection(const FVector& SwingDirection) const
+ECharacterHitReactDirection AJunMonster::DetermineHitReactDirection(const AActor* DamageCauser, const FVector& SwingDirection) const
 {
-	// 공격자 위치가 아니라 "칼이 지나간 방향"을 기준으로 좌/우/정면 반응을 고른다.
-	// 정면에서 맞더라도 스윙이 좌->우인지 우->좌인지에 따라 다른 피격 애니를 고르기 위한 판정이다.
-	const FVector SafeSwingDirection = SwingDirection.GetSafeNormal();
-	if (SafeSwingDirection.IsNearlyZero())
+	if (!DamageCauser)
 	{
-		return ECharacterHitReactDirection::Front_F;
+		return ResolveHitReactDirectionFromSwing(*this, SwingDirection);
 	}
 
-	const FVector LocalSwingDirection = GetActorTransform().InverseTransformVectorNoScale(SafeSwingDirection);
-	const float SideValue = LocalSwingDirection.Y;
-	const float ForwardValue = LocalSwingDirection.X;
-	const float SideThreshold = 0.35f;
+	FVector ToAttackerLocal = GetActorTransform().InverseTransformVectorNoScale(DamageCauser->GetActorLocation() - GetActorLocation());
+	ToAttackerLocal.Z = 0.f;
 
-	if (FMath::Abs(SideValue) >= SideThreshold && FMath::Abs(SideValue) > FMath::Abs(ForwardValue))
+	if (ToAttackerLocal.IsNearlyZero())
 	{
-		return SideValue > 0.f
-			? ECharacterHitReactDirection::Front_R
-			: ECharacterHitReactDirection::Front_L;
+		return ResolveHitReactDirectionFromSwing(*this, SwingDirection);
+	}
+
+	const float AttackerYawDegrees = FMath::RadiansToDegrees(FMath::Atan2(ToAttackerLocal.Y, ToAttackerLocal.X));
+
+	if (AttackerYawDegrees > 60.f && AttackerYawDegrees <= 135.f)
+	{
+		return ECharacterHitReactDirection::Right_R;
+	}
+
+	if (AttackerYawDegrees < -60.f && AttackerYawDegrees >= -135.f)
+	{
+		return ECharacterHitReactDirection::Left_L;
+	}
+
+	if (AttackerYawDegrees > 135.f || AttackerYawDegrees < -135.f)
+	{
+		return ECharacterHitReactDirection::Back_B;
+	}
+
+	const ECharacterHitReactDirection SwingResolvedDirection = ResolveHitReactDirectionFromSwing(*this, SwingDirection);
+	if (SwingResolvedDirection == ECharacterHitReactDirection::Front_FL ||
+		SwingResolvedDirection == ECharacterHitReactDirection::Front_FR)
+	{
+		return SwingResolvedDirection;
 	}
 
 	return ECharacterHitReactDirection::Front_F;
@@ -1598,21 +1803,78 @@ ECharacterHitReactDirection AJunMonster::DetermineHitReactDirection(const FVecto
 
 UAnimMontage* AJunMonster::GetHitReactMontage(EHitReactType HitType, ECharacterHitReactDirection HitDirection) const
 {
-	// 테스트 단계에선 LightHit만 방향별 3개 몽타주를 사용한다.
-	if (HitType != EHitReactType::LightHit)
+	switch (HitType)
 	{
-		return nullptr;
-	}
-
-	switch (HitDirection)
-	{
-	case ECharacterHitReactDirection::Front_L:
-		return LightHitFront_LMontage;
-	case ECharacterHitReactDirection::Front_R:
-		return LightHitFront_RMontage;
-	case ECharacterHitReactDirection::Front_F:
+	case EHitReactType::LightHit:
+		return ResolveDirectionalHitReactMontage(
+			HitDirection,
+			LightHitBackMontage,
+			LightHitFront_FMontage,
+			LightHitFront_FLMontage,
+			LightHitFront_FRMontage,
+			LightHitLeftMontage,
+			LightHitRightMontage
+		);
+	case EHitReactType::HeavyHit_A:
+		if (HitDirection == ECharacterHitReactDirection::Back_B ||
+			HitDirection == ECharacterHitReactDirection::Left_L ||
+			HitDirection == ECharacterHitReactDirection::Right_R)
+		{
+			return ResolveDirectionalHitReactMontage(
+				HitDirection,
+				LargeHitBackMontage,
+				LargeHitFrontMontage,
+				LargeHitFrontLeftMontage,
+				LargeHitFrontRightMontage,
+				LargeHitLeftMontage,
+				LargeHitRightMontage
+			);
+		}
+		return HeavyHitFront_AMontage;
+	case EHitReactType::HeavyHit_B:
+		if (HitDirection == ECharacterHitReactDirection::Back_B ||
+			HitDirection == ECharacterHitReactDirection::Left_L ||
+			HitDirection == ECharacterHitReactDirection::Right_R)
+		{
+			return ResolveDirectionalHitReactMontage(
+				HitDirection,
+				LargeHitBackMontage,
+				LargeHitFrontMontage,
+				LargeHitFrontLeftMontage,
+				LargeHitFrontRightMontage,
+				LargeHitLeftMontage,
+				LargeHitRightMontage
+			);
+		}
+		return HeavyHitFront_BMontage;
+	case EHitReactType::HeavyHit_C:
+		if (HitDirection == ECharacterHitReactDirection::Back_B ||
+			HitDirection == ECharacterHitReactDirection::Left_L ||
+			HitDirection == ECharacterHitReactDirection::Right_R)
+		{
+			return ResolveDirectionalHitReactMontage(
+				HitDirection,
+				LargeHitBackMontage,
+				LargeHitFrontMontage,
+				LargeHitFrontLeftMontage,
+				LargeHitFrontRightMontage,
+				LargeHitLeftMontage,
+				LargeHitRightMontage
+			);
+		}
+		return HeavyHitFront_CMontage;
+	case EHitReactType::LargeHit:
+		return ResolveDirectionalHitReactMontage(
+			HitDirection,
+			LargeHitBackMontage,
+			LargeHitFrontMontage,
+			LargeHitFrontLeftMontage,
+			LargeHitFrontRightMontage,
+			LargeHitLeftMontage,
+			LargeHitRightMontage
+		);
 	default:
-		return LightHitFront_FMontage;
+		return nullptr;
 	}
 }
 

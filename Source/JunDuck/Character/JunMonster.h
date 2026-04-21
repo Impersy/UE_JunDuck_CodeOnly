@@ -80,6 +80,9 @@ struct FMonsterAttackSelection
 	float FacingInterpSpeed = 8.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
+	float PlayRate = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	bool bTryTurnAfterAttack = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
@@ -116,8 +119,10 @@ public:
 	float GetDesiredMaxWalkSpeed() const;
 	void SetDesiredMoveAxes(float NewForward, float NewRight);
 
-	virtual void BeginAttackTraceWindow() override;
+	virtual void BeginAttackTraceWindow(EHitReactType HitReactType = EHitReactType::LightHit) override;
 	virtual void EndAttackTraceWindow() override;
+	virtual void BeginKickAttackTraceWindow(EHitReactType HitReactType = EHitReactType::LightHit) override;
+	virtual void EndKickAttackTraceWindow() override;
 
 protected:
 	// Spawn-time setup: team, weapon, home position and initial top-level state.
@@ -160,6 +165,7 @@ protected:
 	UAnimMontage* GetCurrentAttackMontage() const;
 	const FMonsterAttackSelection& GetCurrentAttackSelection() const;
 	bool TryStartCombatTurnWithThreshold(float MinimumTurnAngle);
+	virtual FString GetMonsterDebugExtraText() const;
 
 protected:
 	// AI / target helpers used by the state machine.
@@ -192,8 +198,8 @@ protected:
 	bool IsInHitReact() const;
 	bool CanBeInterruptedBy(EHitReactType IncomingHitReact) const;
 	virtual bool ShouldStartHitReact(EHitReactType IncomingHitReact) const;
-	float GetHitReactDuration(EHitReactType HitType) const;
-	ECharacterHitReactDirection DetermineHitReactDirection(const FVector& SwingDirection) const;
+	virtual float GetHitReactDuration(EHitReactType HitType) const;
+	ECharacterHitReactDirection DetermineHitReactDirection(const AActor* DamageCauser, const FVector& SwingDirection) const;
 	UAnimMontage* GetHitReactMontage(EHitReactType HitType, ECharacterHitReactDirection HitDirection) const;
 	bool CanUpdateBehavior() const;
 
@@ -224,6 +230,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<class AWeaponActor> EquippedScabbard = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<class AWeaponActor> EquippedKickWeapon = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<class AWeaponActor> EquippedKickWeaponRight = nullptr;
 
 protected:
 	// Patrol / return runtime data.
@@ -267,6 +279,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	bool bIsAttacking = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bAttackInterruptedByHitReact = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	bool bCombatTurnInProgress = false;
@@ -378,10 +393,25 @@ protected:
 	TSubclassOf<class AWeaponActor> DefaultScabbardClass;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+	TSubclassOf<class AWeaponActor> DefaultKickWeaponClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+	TSubclassOf<class AWeaponActor> DefaultKickWeaponRightClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
 	FName WeaponSocketName = TEXT("WeaponSocket_R");
 
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
 	FName ScabbardSocketName = TEXT("ScabSocket");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+	FName KickWeaponSocketName = TEXT("foot_rSocket");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+	FName KickWeaponRightSocketName = TEXT("foot_lSocket");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	int32 KickWeaponTraceSampleCount = 2;
 
 protected:
 	// Hit react runtime state, timing, and animation assets.
@@ -394,18 +424,60 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HitReact")
 	float HitReactTime = 0.f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HitReact")
+	float CurrentHitReactDuration = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitReact")
-	float LightHitDuration = 0.82f;
+	float LightHitDuration = 0.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitReact")
 	float HeavyHitDuration = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitReact")
+	float LargeHitDuration = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> HeavyHitFront_AMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> HeavyHitFront_BMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> HeavyHitFront_CMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LargeHitBackMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LargeHitFrontMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LargeHitFrontLeftMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LargeHitFrontRightMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LargeHitLeftMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LargeHitRightMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LightHitBackMontage = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
 	TObjectPtr<class UAnimMontage> LightHitFront_FMontage = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
-	TObjectPtr<class UAnimMontage> LightHitFront_LMontage = nullptr;
+	TObjectPtr<class UAnimMontage> LightHitFront_FLMontage = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
-	TObjectPtr<class UAnimMontage> LightHitFront_RMontage = nullptr;
+	TObjectPtr<class UAnimMontage> LightHitFront_FRMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LightHitLeftMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact")
+	TObjectPtr<class UAnimMontage> LightHitRightMontage = nullptr;
 };

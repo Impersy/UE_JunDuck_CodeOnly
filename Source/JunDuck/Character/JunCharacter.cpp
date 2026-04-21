@@ -34,27 +34,9 @@ void AJunCharacter::OnDamaged(int32 Damage, TObjectPtr<AJunCharacter> Attacker)
 {
 	Hp = FMath::Clamp(Hp - Damage, 0, MaxHp);
 
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			0.5f,
-			FColor::Green,
-			FString::Printf(TEXT("Hp: %d"), Hp)
-		);
-	}
-
-
 	if (Hp == 0) 
 	{
 		AddGameplayTag(JunGameplayTags::State_Condition_Dead);
-
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			0.5f,
-			FColor::Green,
-			FString::Printf(TEXT("Dead"), Hp)
-		);
 	}
 
 }
@@ -77,11 +59,19 @@ void AJunCharacter::HandleGameplayEventNotify(FGameplayTag EventTag)
 	// 상속 클래스에서 구현
 }
 
-void AJunCharacter::BeginAttackTraceWindow()
+void AJunCharacter::BeginAttackTraceWindow(EHitReactType HitReactType)
 {
 }
 
 void AJunCharacter::EndAttackTraceWindow()
+{
+}
+
+void AJunCharacter::BeginKickAttackTraceWindow(EHitReactType HitReactType)
+{
+}
+
+void AJunCharacter::EndKickAttackTraceWindow()
 {
 }
 

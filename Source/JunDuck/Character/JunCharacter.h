@@ -22,7 +22,10 @@ enum class EHitReactType : uint8
 {
 	None,
 	LightHit,
-	HeavyHit,
+	HeavyHit_A,
+	HeavyHit_B,
+	HeavyHit_C,
+	LargeHit,
 	Airborne,
 	Knockdown,
 	Execution,
@@ -32,9 +35,12 @@ enum class EHitReactType : uint8
 UENUM(BlueprintType)
 enum class ECharacterHitReactDirection : uint8
 {
+	Back_B,
 	Front_F,
-	Front_L,
-	Front_R
+	Front_FL,
+	Front_FR,
+	Left_L,
+	Right_R
 };
 
 UENUM(BlueprintType)
@@ -72,9 +78,13 @@ public:
 	virtual void HandleGameplayEventNotify(FGameplayTag EventTag);
 
 public:
-	virtual void BeginAttackTraceWindow();
+	virtual void BeginAttackTraceWindow(EHitReactType HitReactType = EHitReactType::LightHit);
 
 	virtual void EndAttackTraceWindow();
+
+	virtual void BeginKickAttackTraceWindow(EHitReactType HitReactType = EHitReactType::LightHit);
+
+	virtual void EndKickAttackTraceWindow();
 
 	virtual FVector GetLockOnTargetPoint() const;
 

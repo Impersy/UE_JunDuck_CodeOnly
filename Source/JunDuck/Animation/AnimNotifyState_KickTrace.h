@@ -1,22 +1,17 @@
-
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Character/JunCharacter.h"
-#include "AnimNotifyState_AttackTrace.generated.h"
+#include "AnimNotifyState_KickTrace.generated.h"
 
-/**
- * 
- */
 UCLASS()
-class JUNDUCK_API UAnimNotifyState_AttackTrace : public UAnimNotifyState
+class JUNDUCK_API UAnimNotifyState_KickTrace : public UAnimNotifyState
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackTrace")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "KickTrace")
 	EHitReactType HitReactType = EHitReactType::LightHit;
 
 	virtual FString GetNotifyName_Implementation() const override;

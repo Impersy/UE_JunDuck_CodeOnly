@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Character/JunCharacter.h"
 #include "GameFramework/Actor.h"
 #include "WeaponActor.generated.h"
 
@@ -36,8 +37,15 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void StopAttackTrace();
 
+	UFUNCTION(BlueprintCallable)
+	void SetTraceSampleCount(int32 NewTraceSampleCount);
+
+	UFUNCTION(BlueprintCallable)
+	void SetAttackHitReactType(EHitReactType NewHitReactType);
+
 protected:
 	void UpdateAttackTrace();
+	void DrawAttackTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, bool bSweepDebug, const FVector& PrevStart = FVector::ZeroVector, const FVector& PrevEnd = FVector::ZeroVector) const;
 
 	void ApplyDamageToHitCharacter(AActor* HitActor, const FVector& SwingDirection);
 
@@ -60,7 +68,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trace")
 	TEnumAsByte<ECollisionChannel> TraceChannel = ECC_GameTraceChannel2;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trace")
+	bool bShowAttackTraceDebugAlways = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trace")
+	bool bShowAttackTraceSweepDebug = true;
+
 	bool bTraceActive = false;
+
+	EHitReactType AttackHitReactType = EHitReactType::LightHit;
 
 	FVector PrevTraceStart = FVector::ZeroVector;
 	FVector PrevTraceEnd = FVector::ZeroVector;
