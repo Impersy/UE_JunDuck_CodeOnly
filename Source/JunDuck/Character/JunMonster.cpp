@@ -571,18 +571,7 @@ void AJunMonster::EnterDeadState()
 	AddGameplayTag(JunGameplayTags::State_Condition_Dead);
 	StopAIMovement();
 	SetDesiredMoveAxes(0.f, 0.f);
-	if (EquippedWeapon)
-	{
-		EquippedWeapon->StopAttackTrace();
-	}
-	if (EquippedKickWeapon)
-	{
-		EquippedKickWeapon->StopAttackTrace();
-	}
-	if (EquippedKickWeaponRight)
-	{
-		EquippedKickWeaponRight->StopAttackTrace();
-	}
+	StopAllAttackTraces();
 
 	// 필요하면 죽음 몽타주 / collision 조정 / AI 비활성화
 }
@@ -685,12 +674,8 @@ void AJunMonster::UpdateChase(float DeltaTime)
 		return;
 	}
 
-	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
-	if (TargetCharacter && TargetCharacter->Is_Dead())
+	if (TryHandleDeadCurrentTarget(EMonsterState::Idle))
 	{
-		CurrentTarget = nullptr;
-		bIsHasTarget = false;
-		SetMonsterState(EMonsterState::Idle);
 		return;
 	}
 
@@ -698,9 +683,7 @@ void AJunMonster::UpdateChase(float DeltaTime)
 	if (!CanKeepTarget(CurrentTarget))
 	{
 		LastKnownTargetLocation = CurrentTarget->GetActorLocation();
-		CurrentTarget = nullptr;
-		bIsHasTarget = false;
-
+		ClearCurrentTarget();
 		SetMonsterState(EMonsterState::Return);
 		return;
 	}
@@ -735,20 +718,15 @@ void AJunMonster::UpdateBattleStart(float DeltaTime)
 		return;
 	}
 
-	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
-	if (TargetCharacter && TargetCharacter->Is_Dead())
+	if (TryHandleDeadCurrentTarget(EMonsterState::Idle))
 	{
-		CurrentTarget = nullptr;
-		bIsHasTarget = false;
-		SetMonsterState(EMonsterState::Idle);
 		return;
 	}
 
 	if (!CanRemainInCombat(CurrentTarget))
 	{
 		LastKnownTargetLocation = CurrentTarget->GetActorLocation();
-		CurrentTarget = nullptr;
-		bIsHasTarget = false;
+		ClearCurrentTarget();
 		SetMonsterState(EMonsterState::Return);
 		return;
 	}
@@ -813,21 +791,16 @@ void AJunMonster::UpdateCombat(float DeltaTime)
 		return;
 	}
 
-	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
-	if (TargetCharacter && TargetCharacter->Is_Dead())
+	if (TryHandleDeadCurrentTarget(EMonsterState::Idle))
 	{
-		CurrentTarget = nullptr;
-		bIsHasTarget = false;
 		CombatMoveInput = FVector2D::ZeroVector;
-		SetMonsterState(EMonsterState::Idle);
 		return;
 	}
 
 	if (!CanRemainInCombat(CurrentTarget))
 	{
 		LastKnownTargetLocation = CurrentTarget->GetActorLocation();
-		CurrentTarget = nullptr;
-		bIsHasTarget = false;
+		ClearCurrentTarget();
 		CombatMoveInput = FVector2D::ZeroVector;
 		SetMonsterState(EMonsterState::Return);
 		return;
@@ -1367,6 +1340,42 @@ void AJunMonster::StopAIMovement()
 	AICon->StopMovement();
 }
 
+void AJunMonster::ClearCurrentTarget()
+{
+	CurrentTarget = nullptr;
+	bIsHasTarget = false;
+}
+
+bool AJunMonster::TryHandleDeadCurrentTarget(EMonsterState NextStateIfDead)
+{
+	const AJunCharacter* TargetCharacter = Cast<AJunCharacter>(CurrentTarget);
+	if (!TargetCharacter || !TargetCharacter->Is_Dead())
+	{
+		return false;
+	}
+
+	ClearCurrentTarget();
+	SetMonsterState(NextStateIfDead);
+	return true;
+}
+
+void AJunMonster::StopAllAttackTraces()
+{
+	EndAttackTraceWindow();
+	EndKickAttackTraceWindow();
+
+	if (EquippedScabbard)
+	{
+		EquippedScabbard->StopAttackTrace();
+	}
+}
+
+void AJunMonster::ResetCurrentAttackRuntimeState()
+{
+	CurrentAttackMontage = nullptr;
+	CurrentAttackSelection = FMonsterAttackSelection();
+}
+
 void AJunMonster::TryAttack()
 {
 	if (!CanAttackTarget())
@@ -1471,8 +1480,7 @@ void AJunMonster::FinishAttack()
 		TryStartPostAttackTurn();
 	}
 
-	CurrentAttackMontage = nullptr;
-	CurrentAttackSelection = FMonsterAttackSelection();
+	ResetCurrentAttackRuntimeState();
 }
 
 FMonsterAttackSelection AJunMonster::ChooseNextAttackSelection() const
@@ -1664,10 +1672,15 @@ void AJunMonster::StartHitReact(EHitReactType NewHitReact, ECharacterHitReactDir
 	CurrentHitReactDirection = NewHitDirection;
 	HitReactTime = 0.f;
 	CurrentHitReactDuration = GetHitReactDuration(NewHitReact);
+	CurrentHitReactControlLockRemainTime = GetHitReactControlLockDuration(NewHitReact);
 
 	if (bIsAttacking)
 	{
 		bAttackInterruptedByHitReact = true;
+		bIsAttacking = false;
+		AttackTime = 0.f;
+		AttackFacingRemainTime = 0.f;
+		ResetCurrentAttackRuntimeState();
 	}
 
 	RemoveGameplayTag(JunGameplayTags::State_Condition_SuperArmor);
@@ -1676,6 +1689,8 @@ void AJunMonster::StartHitReact(EHitReactType NewHitReact, ECharacterHitReactDir
 
 	CancelCombatTurn();
 	StopAIMovement();
+	StopAllAttackTraces();
+	OnHitReactStarted(NewHitReact, NewHitDirection);
 
 	if (UAnimMontage* HitReactMontage = GetHitReactMontage(NewHitReact, NewHitDirection))
 	{
@@ -1698,6 +1713,15 @@ void AJunMonster::UpdateHitReact(float DeltaTime)
 	// 현재는 몽타주 종료가 아니라 Duration 기준으로 HitReact 상태를 끝낸다.
 	HitReactTime += DeltaTime;
 
+	if (CurrentHitReactControlLockRemainTime > 0.f)
+	{
+		CurrentHitReactControlLockRemainTime = FMath::Max(0.f, CurrentHitReactControlLockRemainTime - DeltaTime);
+		if (CurrentHitReactControlLockRemainTime <= 0.f)
+		{
+			ReleaseHitReactControlLock();
+		}
+	}
+
 	if (HitReactTime >= CurrentHitReactDuration)
 	{
 		EndHitReact();
@@ -1708,13 +1732,29 @@ void AJunMonster::EndHitReact()
 {
 	// HitReact 종료는 태그 해제만 담당하고,
 	// 이후 AI 상태 갱신은 CanUpdateBehavior()가 다시 허용한다.
+	const EHitReactType EndedHitReact = CurrentHitReact;
 	CurrentHitReact = EHitReactType::None;
 	CurrentHitReactDirection = ECharacterHitReactDirection::Front_F;
 	HitReactTime = 0.f;
 	CurrentHitReactDuration = 0.f;
+	CurrentHitReactControlLockRemainTime = 0.f;
 
 	RemoveGameplayTag(JunGameplayTags::State_Condition_HitReact);
+	ReleaseHitReactControlLock();
+	OnHitReactEnded(EndedHitReact);
+}
+
+void AJunMonster::ReleaseHitReactControlLock()
+{
 	RemoveGameplayTag(JunGameplayTags::State_Condition_ControlLocked);
+}
+
+void AJunMonster::OnHitReactStarted(EHitReactType NewHitReact, ECharacterHitReactDirection NewHitDirection)
+{
+}
+
+void AJunMonster::OnHitReactEnded(EHitReactType EndedHitReact)
+{
 }
 
 bool AJunMonster::IsInHitReact() const
@@ -1757,6 +1797,11 @@ float AJunMonster::GetHitReactDuration(EHitReactType HitType) const
 	default:
 		return 0.f;
 	}
+}
+
+float AJunMonster::GetHitReactControlLockDuration(EHitReactType HitType) const
+{
+	return GetHitReactDuration(HitType);
 }
 
 ECharacterHitReactDirection AJunMonster::DetermineHitReactDirection(const AActor* DamageCauser, const FVector& SwingDirection) const

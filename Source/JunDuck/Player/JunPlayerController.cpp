@@ -59,6 +59,11 @@ void AJunPlayerController::SetupInputComponent()
 			auto BasicAttackAction = InputData->FindInputActionByTag(JunGameplayTags::Input_Action_BasicAttack);
 			EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &ThisClass::Input_BasicAttack);
 
+			auto HeavyAttackAction = InputData->FindInputActionByTag(JunGameplayTags::Input_Action_HeavyAttack);
+			EnhancedInputComponent->BindAction(HeavyAttackAction, ETriggerEvent::Started, this, &ThisClass::Input_HeavyAttackStarted);
+			EnhancedInputComponent->BindAction(HeavyAttackAction, ETriggerEvent::Completed, this, &ThisClass::Input_HeavyAttackReleased);
+			EnhancedInputComponent->BindAction(HeavyAttackAction, ETriggerEvent::Canceled, this, &ThisClass::Input_HeavyAttackReleased);
+
 			auto LockOnAction = InputData->FindInputActionByTag(JunGameplayTags::Input_Action_LockOn);
 			EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Started, this, &ThisClass::Input_LockOn);
 
@@ -299,6 +304,26 @@ void AJunPlayerController::Input_BasicAttack(const FInputActionValue& InputValue
 	}
 
 	JunPlayer->BasicAttack();
+}
+
+void AJunPlayerController::Input_HeavyAttackStarted(const FInputActionValue& InputValue)
+{
+	if (!JunPlayer)
+	{
+		return;
+	}
+
+	JunPlayer->OnHeavyAttackStarted();
+}
+
+void AJunPlayerController::Input_HeavyAttackReleased(const FInputActionValue& InputValue)
+{
+	if (!JunPlayer)
+	{
+		return;
+	}
+
+	JunPlayer->OnHeavyAttackReleased();
 }
 
 void AJunPlayerController::Input_LockOn(const FInputActionValue& InputValue)

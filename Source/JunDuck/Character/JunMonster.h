@@ -180,6 +180,10 @@ protected:
 	void StartChase(AActor* NewTarget);
 	void StopAIMovement();
 	void TryAttack();
+	void ClearCurrentTarget();
+	bool TryHandleDeadCurrentTarget(EMonsterState NextStateIfDead);
+	void StopAllAttackTraces();
+	void ResetCurrentAttackRuntimeState();
 	bool TryResolveReachableLocationToward(const FVector& DesiredLocation, FVector& OutReachableLocation) const;
 	float GetEffectiveReturnReachedDistance() const;
 	bool HasReachedReturnTarget() const;
@@ -195,10 +199,14 @@ protected:
 	void StartHitReact(EHitReactType NewHitReact, ECharacterHitReactDirection NewHitDirection);
 	void UpdateHitReact(float DeltaTime);
 	void EndHitReact();
+	void ReleaseHitReactControlLock();
+	virtual void OnHitReactStarted(EHitReactType NewHitReact, ECharacterHitReactDirection NewHitDirection);
+	virtual void OnHitReactEnded(EHitReactType EndedHitReact);
 	bool IsInHitReact() const;
 	bool CanBeInterruptedBy(EHitReactType IncomingHitReact) const;
 	virtual bool ShouldStartHitReact(EHitReactType IncomingHitReact) const;
 	virtual float GetHitReactDuration(EHitReactType HitType) const;
+	virtual float GetHitReactControlLockDuration(EHitReactType HitType) const;
 	ECharacterHitReactDirection DetermineHitReactDirection(const AActor* DamageCauser, const FVector& SwingDirection) const;
 	UAnimMontage* GetHitReactMontage(EHitReactType HitType, ECharacterHitReactDirection HitDirection) const;
 	bool CanUpdateBehavior() const;
@@ -426,6 +434,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HitReact")
 	float CurrentHitReactDuration = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HitReact")
+	float CurrentHitReactControlLockRemainTime = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitReact")
 	float LightHitDuration = 0.2f;

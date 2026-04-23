@@ -112,6 +112,7 @@ void AJunPlayer::Tick(float DeltaTime)
 	UpdateBasicAttackJumpAndMoveCancelState(DeltaTime);
 
 	UpdateBasicAttackRecoveryBuffer(DeltaTime);
+	UpdateHeavyAttackInput(DeltaTime);
 
 	UpdateDodgeState(DeltaTime);
 
@@ -387,7 +388,8 @@ bool AJunPlayer::CanStartLockOnTurn() const
 		return false;
 	}
 
-	if (bIsBasicAttacking || (GetCharacterMovement() && GetCharacterMovement()->IsFalling()))
+	if (HasGameplayTag(JunGameplayTags::State_Action_Attack) ||
+		(GetCharacterMovement() && GetCharacterMovement()->IsFalling()))
 	{
 		return false;
 	}
@@ -399,6 +401,11 @@ bool AJunPlayer::CanStartLockOnTurn() const
 	}
 
 	return GetVelocity().Size2D() <= LockOnTurnMaxGroundSpeed;
+}
+
+bool AJunPlayer::IsHeavyAttacking() const
+{
+	return bIsHeavyAttacking;
 }
 
 bool AJunPlayer::IsLockOnTurnPlaying() const
@@ -590,6 +597,55 @@ void AJunPlayer::BasicAttack()
 	bBufferedBasicAttackInput = true;
 }
 
+void AJunPlayer::OnHeavyAttackStarted()
+{
+	if (bHeavyAttackInputHeld || bIsHeavyAttacking)
+	{
+		return;
+	}
+
+	bHeavyAttackInputHeld = true;
+	HeavyAttackInputHoldTime = 0.f;
+	HeavyAttackChargeLoopElapsedTime = 0.f;
+}
+
+void AJunPlayer::OnHeavyAttackReleased()
+{
+	if (!bHeavyAttackInputHeld && !bIsHeavyAttacking)
+	{
+		return;
+	}
+
+	bHeavyAttackInputHeld = false;
+
+	if (bIsHeavyAttacking)
+	{
+		if (HeavyAttackState == EJunHeavyAttackState::ChargeStart)
+		{
+			bHeavyAttackChargeEndRequested = true;
+		}
+		else if (HeavyAttackState == EJunHeavyAttackState::ChargeLoop)
+		{
+			StartHeavyAttackChargeEnd();
+		}
+		return;
+	}
+
+	if (!CanStartHeavyAttack())
+	{
+		ResetHeavyAttackChargeInput();
+		return;
+	}
+
+	if (HeavyAttackInputHoldTime >= HeavyAttackChargeThreshold)
+	{
+		StartHeavyAttackChargeEnd();
+		return;
+	}
+
+	StartHeavyAttackTap();
+}
+
 void AJunPlayer::StartDodge()
 {
 	if (!AnimInstance)
@@ -686,6 +742,11 @@ void AJunPlayer::OnDefenseStarted()
 			bParryWindowOpen = true;
 			ParryWindowRemainTime = DefaultParryWindowDuration;
 		}
+		return;
+	}
+
+	if (bIsHeavyAttacking)
+	{
 		return;
 	}
 
@@ -1312,6 +1373,285 @@ void AJunPlayer::TryExecuteBufferedBasicAttackRecoveryAction()
 	}
 }
 
+void AJunPlayer::UpdateHeavyAttackInput(float DeltaTime)
+{
+	if (!bHeavyAttackInputHeld && !bIsHeavyAttacking)
+	{
+		return;
+	}
+
+	if (!bIsHeavyAttacking)
+	{
+		if (!CanStartHeavyAttack())
+		{
+			ResetHeavyAttackChargeInput();
+			return;
+		}
+
+		HeavyAttackInputHoldTime += DeltaTime;
+		if (!bHeavyAttackChargeStartPlayed && HeavyAttackInputHoldTime >= HeavyAttackChargeThreshold)
+		{
+			StartHeavyAttackCharge();
+		}
+
+		return;
+	}
+
+	if (HeavyAttackState == EJunHeavyAttackState::ChargeLoop)
+	{
+		HeavyAttackChargeLoopElapsedTime += DeltaTime;
+		if (bHeavyAttackChargeEndRequested &&
+			AnimInstance &&
+			AnimInstance->Montage_GetCurrentSection(HeavyAttackChargeMontage) == HeavyAttackChargeEndSectionName)
+		{
+			HeavyAttackState = EJunHeavyAttackState::ChargeEnd;
+			ExecuteHeavyAttackChargeEndDash();
+			ResetHeavyAttackChargeInput();
+			return;
+		}
+
+		if (!bHeavyAttackChargeEndRequested &&
+			HeavyAttackChargeLoopElapsedTime >= HeavyAttackChargeLoopMaxDuration)
+		{
+			bHeavyAttackInputHeld = false;
+			bHeavyAttackChargeEndRequested = true;
+
+			if (AnimInstance && HeavyAttackChargeMontage)
+			{
+				AnimInstance->Montage_SetNextSection(
+					HeavyAttackChargeLoopSectionName,
+					HeavyAttackChargeEndSectionName,
+					HeavyAttackChargeMontage
+				);
+			}
+		}
+	}
+	else if (HeavyAttackState == EJunHeavyAttackState::ChargeStart)
+	{
+		HeavyAttackChargeStartRemainTime = FMath::Max(0.f, HeavyAttackChargeStartRemainTime - DeltaTime);
+		if (HeavyAttackChargeStartRemainTime <= 0.f)
+		{
+			if (bHeavyAttackInputHeld && !bHeavyAttackChargeEndRequested)
+			{
+				HeavyAttackState = EJunHeavyAttackState::ChargeLoop;
+				HeavyAttackChargeStartRemainTime = 0.f;
+				HeavyAttackChargeLoopElapsedTime = 0.f;
+			}
+			else
+			{
+				StartHeavyAttackChargeEnd();
+			}
+		}
+	}
+}
+
+bool AJunPlayer::CanStartHeavyAttack() const
+{
+	if (!AnimInstance)
+	{
+		return false;
+	}
+
+	if ((GetCharacterMovement() && GetCharacterMovement()->IsFalling()) ||
+		HasGameplayTag(JunGameplayTags::State_Action_Dodge) ||
+		HasGameplayTag(JunGameplayTags::State_Block_Attack) ||
+		HasGameplayTag(JunGameplayTags::State_Condition_ControlLocked))
+	{
+		return false;
+	}
+
+	if (bIsBasicAttacking || bIsHeavyAttacking)
+	{
+		return false;
+	}
+
+	return DefenseState == EJunDefenseState::None;
+}
+
+void AJunPlayer::ResetHeavyAttackChargeInput()
+{
+	bHeavyAttackInputHeld = false;
+	bHeavyAttackChargeStartPlayed = false;
+	bHeavyAttackChargeEndRequested = false;
+	HeavyAttackInputHoldTime = 0.f;
+	HeavyAttackChargeStartRemainTime = 0.f;
+}
+
+void AJunPlayer::StartHeavyAttackTap()
+{
+	if (!AnimInstance || !HeavyAttackTapMontage)
+	{
+		ResetHeavyAttackChargeInput();
+		return;
+	}
+
+	CancelLockOnTurn();
+	TargetActor = FindBestAttackTarget();
+	BeginAttackFacingAssist(TargetActor);
+
+	AddGameplayTag(JunGameplayTags::State_Action_Attack);
+	AddGameplayTag(JunGameplayTags::State_Block_Move);
+	AddGameplayTag(JunGameplayTags::State_Block_Jump);
+	AddGameplayTag(JunGameplayTags::State_Block_Attack);
+	AddGameplayTag(JunGameplayTags::State_Block_Dodge);
+
+	bIsHeavyAttacking = true;
+	HeavyAttackState = EJunHeavyAttackState::Tap;
+	CurrentHeavyAttackMontage = HeavyAttackTapMontage;
+	HeavyAttackChargeLoopElapsedTime = 0.f;
+
+	AnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+	AnimInstance->OnMontageEnded.AddDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+	AnimInstance->Montage_Play(HeavyAttackTapMontage);
+
+	ResetHeavyAttackChargeInput();
+}
+
+void AJunPlayer::StartHeavyAttackCharge()
+{
+	if (bHeavyAttackChargeStartPlayed)
+	{
+		return;
+	}
+
+	if (!AnimInstance || !HeavyAttackChargeMontage)
+	{
+		StartHeavyAttackTap();
+		return;
+	}
+
+	CancelLockOnTurn();
+	TargetActor = FindBestAttackTarget();
+	BeginAttackFacingAssist(TargetActor);
+
+	AddGameplayTag(JunGameplayTags::State_Action_Attack);
+	AddGameplayTag(JunGameplayTags::State_Block_Move);
+	AddGameplayTag(JunGameplayTags::State_Block_Jump);
+	AddGameplayTag(JunGameplayTags::State_Block_Attack);
+	AddGameplayTag(JunGameplayTags::State_Block_Dodge);
+
+	bIsHeavyAttacking = true;
+	bHeavyAttackChargeStartPlayed = true;
+	bHeavyAttackChargeEndRequested = false;
+	HeavyAttackState = EJunHeavyAttackState::ChargeStart;
+	CurrentHeavyAttackMontage = HeavyAttackChargeMontage;
+	const int32 StartSectionIndex = HeavyAttackChargeMontage->GetSectionIndex(HeavyAttackChargeStartSectionName);
+	HeavyAttackChargeStartRemainTime = StartSectionIndex != INDEX_NONE
+		? HeavyAttackChargeMontage->GetSectionLength(StartSectionIndex)
+		: HeavyAttackChargeMontage->GetPlayLength();
+	HeavyAttackChargeLoopElapsedTime = 0.f;
+	bHeavyAttackChargeEndDashExecuted = false;
+
+	AnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+	AnimInstance->OnMontageEnded.AddDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+	AnimInstance->Montage_Play(HeavyAttackChargeMontage);
+	AnimInstance->Montage_SetNextSection(
+		HeavyAttackChargeLoopSectionName,
+		HeavyAttackChargeLoopSectionName,
+		HeavyAttackChargeMontage
+	);
+	AnimInstance->Montage_JumpToSection(HeavyAttackChargeStartSectionName, HeavyAttackChargeMontage);
+}
+
+void AJunPlayer::StartHeavyAttackChargeEnd()
+{
+	if (!AnimInstance || !HeavyAttackChargeMontage)
+	{
+		FinishHeavyAttack();
+		return;
+	}
+
+	if (!bIsHeavyAttacking)
+	{
+		CancelLockOnTurn();
+		AddGameplayTag(JunGameplayTags::State_Action_Attack);
+		AddGameplayTag(JunGameplayTags::State_Block_Move);
+		AddGameplayTag(JunGameplayTags::State_Block_Jump);
+		AddGameplayTag(JunGameplayTags::State_Block_Attack);
+		AddGameplayTag(JunGameplayTags::State_Block_Dodge);
+		bIsHeavyAttacking = true;
+	}
+
+	TargetActor = FindBestAttackTarget();
+	BeginAttackFacingAssist(TargetActor);
+
+	HeavyAttackState = EJunHeavyAttackState::ChargeEnd;
+	CurrentHeavyAttackMontage = HeavyAttackChargeMontage;
+	HeavyAttackChargeStartRemainTime = 0.f;
+
+	AnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+	AnimInstance->OnMontageEnded.AddDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+	if (!AnimInstance->Montage_IsPlaying(HeavyAttackChargeMontage))
+	{
+		AnimInstance->Montage_Play(HeavyAttackChargeMontage);
+	}
+	AnimInstance->Montage_JumpToSection(HeavyAttackChargeEndSectionName, HeavyAttackChargeMontage);
+	ExecuteHeavyAttackChargeEndDash();
+	ResetHeavyAttackChargeInput();
+}
+
+void AJunPlayer::ExecuteHeavyAttackChargeEndDash()
+{
+	if (bHeavyAttackChargeEndDashExecuted)
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (!MovementComponent)
+	{
+		return;
+	}
+
+	bHeavyAttackChargeEndDashExecuted = true;
+
+	const float FullDashThreshold =
+		HeavyAttackChargeLoopMaxDuration * FMath::Clamp(HeavyAttackChargeFullDashThresholdRatio, 0.f, 1.f);
+	const bool bUseFullDash = HeavyAttackChargeLoopElapsedTime >= FullDashThreshold;
+	const float DashSpeed = bUseFullDash
+		? HeavyAttackChargeEndDashMaxSpeed
+		: HeavyAttackChargeEndDashMaxSpeed * HeavyAttackChargeEndDashMinSpeedRatio;
+
+	FVector DashDirection = GetActorForwardVector();
+	DashDirection.Z = 0.f;
+	DashDirection = DashDirection.GetSafeNormal();
+	if (DashDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const float CurrentVerticalSpeed = MovementComponent->Velocity.Z;
+	MovementComponent->Velocity = FVector(
+		DashDirection.X * DashSpeed,
+		DashDirection.Y * DashSpeed,
+		CurrentVerticalSpeed
+	);
+
+	KnockbackBrakingOverrideRemainTime = HeavyAttackChargeEndDashGroundMotionDuration;
+	KnockbackBrakingDecelerationOverride = 0.f;
+	KnockbackGroundFrictionOverride = 0.f;
+	KnockbackBrakingFrictionFactorOverride = 0.f;
+}
+
+void AJunPlayer::FinishHeavyAttack()
+{
+	EndAttackFacingAssist();
+
+	RemoveGameplayTag(JunGameplayTags::State_Action_Attack);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Move);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Jump);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Attack);
+	RemoveGameplayTag(JunGameplayTags::State_Block_Dodge);
+
+	bIsHeavyAttacking = false;
+	HeavyAttackState = EJunHeavyAttackState::None;
+	CurrentHeavyAttackMontage = nullptr;
+	HeavyAttackChargeStartRemainTime = 0.f;
+	HeavyAttackChargeLoopElapsedTime = 0.f;
+	bHeavyAttackChargeEndDashExecuted = false;
+	ResetHeavyAttackChargeInput();
+}
+
 void AJunPlayer::UpdateBasicAttackJumpAndMoveCancelState(float DeltaTime)
 {
 	if (!bIsBasicAttacking)
@@ -1720,6 +2060,35 @@ void AJunPlayer::OnBasicAttackMontageEnded(UAnimMontage* Montage, bool bInterrup
 	if (EquippedWeapon)
 	{
 		EquippedWeapon->StopAttackTrace();
+	}
+}
+
+void AJunPlayer::OnHeavyAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != CurrentHeavyAttackMontage)
+	{
+		return;
+	}
+
+	if (bInterrupted)
+	{
+		return;
+	}
+
+	switch (HeavyAttackState)
+	{
+	case EJunHeavyAttackState::ChargeStart:
+		// ChargeStart transition is driven by UpdateHeavyAttackInput so blend-out timing
+		// cannot skip or duplicate the startup pose.
+		break;
+	case EJunHeavyAttackState::ChargeLoop:
+		// Loop exits through input release or HeavyAttackChargeLoopMaxDuration.
+		break;
+	case EJunHeavyAttackState::Tap:
+	case EJunHeavyAttackState::ChargeEnd:
+	default:
+		FinishHeavyAttack();
+		break;
 	}
 }
 
@@ -2410,6 +2779,17 @@ void AJunPlayer::InterruptActionsForHitReaction()
 	if (bIsBasicAttacking)
 	{
 		CancelBasicAttackForRecoveryTransition();
+	}
+
+	if (bIsHeavyAttacking)
+	{
+		if (AnimInstance && CurrentHeavyAttackMontage)
+		{
+			AnimInstance->OnMontageEnded.RemoveDynamic(this, &AJunPlayer::OnHeavyAttackMontageEnded);
+			AnimInstance->Montage_Stop(0.05f, CurrentHeavyAttackMontage);
+		}
+
+		FinishHeavyAttack();
 	}
 
 	if (DefenseState != EJunDefenseState::None)

@@ -30,6 +30,16 @@ enum class EJunBufferedRecoveryAction : uint8
 };
 
 UENUM(BlueprintType)
+enum class EJunHeavyAttackState : uint8
+{
+	None,
+	Tap,
+	ChargeStart,
+	ChargeLoop,
+	ChargeEnd
+};
+
+UENUM(BlueprintType)
 enum class EJunBufferedDefenseCancelAction : uint8
 {
 	None,
@@ -95,6 +105,8 @@ public: // Engine / Character Overrides
 
 public: // External Gameplay API
 	void BasicAttack();
+	void OnHeavyAttackStarted();
+	void OnHeavyAttackReleased();
 	void StartDodge();
 	void OnDodgeInputReleased();
 	void OnDefenseStarted();
@@ -109,6 +121,7 @@ public: // Query / State API
 	bool IsGuardOn();
 	bool IsGuardPoseActive();
 	bool IsBasicAttacking() const;
+	bool IsHeavyAttacking() const;
 	bool IsWalking() const;
 	bool IsSprinting() const;
 	bool IsInParrySuccess() const;
@@ -154,6 +167,19 @@ protected: // BasicAttack
 
 	UFUNCTION()
 	void OnBasicAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+protected: // HeavyAttack
+	void UpdateHeavyAttackInput(float DeltaTime);
+	bool CanStartHeavyAttack() const;
+	void ResetHeavyAttackChargeInput();
+	void StartHeavyAttackTap();
+	void StartHeavyAttackCharge();
+	void StartHeavyAttackChargeEnd();
+	void ExecuteHeavyAttackChargeEndDash();
+	void FinishHeavyAttack();
+
+	UFUNCTION()
+	void OnHeavyAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 protected: // Dodge
 	UFUNCTION()
@@ -303,6 +329,9 @@ protected: // External References
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "LockOn")
 	TObjectPtr<class UAnimMontage> CurrentLockOnTurnMontage;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	TObjectPtr<class UAnimMontage> CurrentHeavyAttackMontage;
+
 protected: // Runtime Camera State
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	EJunCameraMode CameraMode = EJunCameraMode::Free;
@@ -331,6 +360,33 @@ protected: // Runtime Camera State
 protected: // Runtime Combat / Defense State
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BasicAttack")
 	bool bIsBasicAttacking = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	bool bIsHeavyAttacking = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	bool bHeavyAttackInputHeld = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	bool bHeavyAttackChargeStartPlayed = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	bool bHeavyAttackChargeEndRequested = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackInputHoldTime = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeStartRemainTime = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeLoopElapsedTime = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	bool bHeavyAttackChargeEndDashExecuted = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeavyAttack")
+	EJunHeavyAttackState HeavyAttackState = EJunHeavyAttackState::None;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BasicAttack")
 	int32 BasicAttackComboIndex = 0;
@@ -584,7 +640,7 @@ protected: // Camera Tuning
 	FVector LockOnCameraSocketOffset = FVector(0.f, 45.f, 0.f);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
-	float LockOnRotationInterpSpeed = 10.f;
+    float LockOnRotationInterpSpeed = 5.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|LockOn")
 	float LockOnCharacterRotationInterpSpeed = 10.f;
@@ -749,6 +805,33 @@ protected: // Attack / Defense Tuning
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BasicAttack")
 	float PostBasicAttackDefenseBufferDuration = 0.3f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeThreshold = 0.1f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeLoopMaxDuration = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeFullDashThresholdRatio = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeEndDashMaxSpeed = 2400.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeEndDashMinSpeedRatio = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	float HeavyAttackChargeEndDashGroundMotionDuration = 0.18f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	FName HeavyAttackChargeStartSectionName = TEXT("Start");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	FName HeavyAttackChargeLoopSectionName = TEXT("Loop");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	FName HeavyAttackChargeEndSectionName = TEXT("End");
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BasicAttack")
 	TArray<float> BasicAttackDodgeCancelOpenTimes = { 0.55f, 0.55f, 0.6f, 0.7f };
 
@@ -815,6 +898,12 @@ protected: // Movement / Jump Tuning
 protected: // Animation Assets
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BasicAttack")
 	TObjectPtr<class UAnimMontage> BasicAttackMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	TObjectPtr<class UAnimMontage> HeavyAttackTapMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HeavyAttack")
+	TObjectPtr<class UAnimMontage> HeavyAttackChargeMontage;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dodge")
 	TObjectPtr<class UAnimMontage> DodgeMontage;

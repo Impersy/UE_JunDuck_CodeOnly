@@ -36,6 +36,8 @@ private:
 	void Input_Dodge(const FInputActionValue& InputValue);
 	void Input_DodgeReleased(const FInputActionValue& InputValue);
 	void Input_BasicAttack(const FInputActionValue& InputValue);
+	void Input_HeavyAttackStarted(const FInputActionValue& InputValue);
+	void Input_HeavyAttackReleased(const FInputActionValue& InputValue);
 	void Input_LockOn(const FInputActionValue& InputValue);
 	void Input_Defense(const FInputActionValue& InputValue);
 	void Input_DefenseReleased(const FInputActionValue& InputValue);

@@ -9,6 +9,7 @@ UE_DEFINE_GAMEPLAY_TAG(Input_Action_Move, "Input.Action.Move");
 UE_DEFINE_GAMEPLAY_TAG(Input_Action_Turn, "Input.Action.Turn");
 UE_DEFINE_GAMEPLAY_TAG(Input_Action_Jump, "Input.Action.Jump");
 UE_DEFINE_GAMEPLAY_TAG(Input_Action_BasicAttack, "Input.Action.BasicAttack");
+UE_DEFINE_GAMEPLAY_TAG(Input_Action_HeavyAttack, "Input.Action.HeavyAttack");
 UE_DEFINE_GAMEPLAY_TAG(Input_Action_Dodge, "Input.Action.Dodge");
 UE_DEFINE_GAMEPLAY_TAG(Input_Action_LockOn, "Input.Action.LockOn");
 UE_DEFINE_GAMEPLAY_TAG(Input_Action_Run, "Input.Action.Run");
@@ -34,6 +35,7 @@ UE_DEFINE_GAMEPLAY_TAG(State_Condition_Invincible, "State.Condition.Invincible")
 UE_DEFINE_GAMEPLAY_TAG(State_Condition_HitReact, "State.Condition.HitReact");
 UE_DEFINE_GAMEPLAY_TAG(State_Condition_ControlLocked, "State.Condition.ControlLocked");
 UE_DEFINE_GAMEPLAY_TAG(State_Condition_SuperArmor, "State.Condition.SuperArmor");
+UE_DEFINE_GAMEPLAY_TAG(State_Condition_PostHitArmor, "State.Condition.PostHitArmor");
  
 UE_DEFINE_GAMEPLAY_TAG(State_Block_Move, "State.Block.Move");
 UE_DEFINE_GAMEPLAY_TAG(State_Block_Jump, "State.Block.Jump");
