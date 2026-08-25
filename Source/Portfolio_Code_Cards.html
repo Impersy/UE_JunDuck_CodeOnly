@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JunDuck Portfolio Code Cards</title>
+  <style>
+    :root {
+      --bg: #111315;
+      --card: #1e1e1e;
+      --card-line: #30363d;
+      --text: #d4d4d4;
+      --muted: #8b949e;
+      --type: #4ec9b0;
+      --func: #dcdcaa;
+      --keyword: #c586c0;
+      --number: #b5cea8;
+      --string: #ce9178;
+      --comment: #7fcf7f;
+      --var: #9cdcfe;
+      --accent: #569cd6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #1c2330 0, #111315 34rem);
+      color: var(--text);
+      font-family: "Segoe UI", "Pretendard", "Malgun Gothic", sans-serif;
+      padding: 40px;
+    }
+
+    .page {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 28px;
+    }
+
+    .title {
+      margin-bottom: 6px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 34px;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    .title p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .code-card {
+      background: var(--card);
+      border: 1px solid var(--card-line);
+      border-radius: 8px;
+      box-shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+
+    .code-header {
+      height: 48px;
+      border-bottom: 1px solid var(--card-line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      background: #181a1f;
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #4b5563;
+    }
+
+    .card-meta {
+      color: var(--muted);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+    }
+
+    .card-body {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 0;
+      min-height: 420px;
+    }
+
+    .card-info {
+      border-right: 1px solid var(--card-line);
+      padding: 26px 24px;
+      background: #191b20;
+    }
+
+    .index {
+      color: var(--accent);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+
+    .card-info h2 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.25;
+      letter-spacing: 0;
+      font-weight: 750;
+    }
+
+    .card-info p {
+      margin: 18px 0 0;
+      color: #b7bdc5;
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .flow {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #2a3038;
+      color: #d7ba7d;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .mini-diagram {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #2a3038;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mini-node {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 10px;
+      border: 1px solid #38414d;
+      border-radius: 6px;
+      background: #20242b;
+      color: #c9d1d9;
+      font-size: 13px;
+      font-weight: 650;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .mini-node.player {
+      border-color: #2f6fa3;
+      background: #172636;
+      color: #9cdcfe;
+    }
+
+    .mini-node.boss {
+      border-color: #8a4545;
+      background: #311d20;
+      color: #f0b6b6;
+    }
+
+    .mini-node.common {
+      border-color: #6d5ca8;
+      background: #252039;
+      color: #d7c6ff;
+    }
+
+    .mini-node.system {
+      border-color: #4f7d58;
+      background: #1d2c21;
+      color: #b7e3bd;
+    }
+
+    .mini-arrow {
+      color: #6e7681;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      text-align: center;
+      line-height: 1;
+      font-size: 16px;
+    }
+
+    .mini-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .mini-caption {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      text-align: center;
+      margin-top: 2px;
+    }
+
+    pre {
+      margin: 0;
+      padding: 22px 28px;
+      overflow: auto;
+      font-family: Consolas, "Cascadia Mono", "D2Coding", monospace;
+      font-size: 17px;
+      line-height: 1.38;
+      tab-size: 4;
+      color: var(--text);
+    }
+
+    code {
+      font-family: inherit;
+    }
+
+    .type { color: var(--type); }
+    .func { color: var(--func); }
+    .kw { color: var(--keyword); }
+    .num { color: var(--number); }
+    .str { color: var(--string); }
+    .com {
+      color: var(--comment);
+      font-style: normal;
+      font-weight: 500;
+    }
+    .var { color: var(--var); }
+    .op { color: var(--text); }
+    .macro { color: var(--func); }
+
+    @media (max-width: 900px) {
+      body {
+        padding: 22px;
+      }
+
+      .card-body {
+        grid-template-columns: 1fr;
+      }
+
+      .card-info {
+        border-right: 0;
+        border-bottom: 1px solid var(--card-line);
+      }
+
+      pre {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="title">
+      <h1>JunDuck Combat Architecture Code Cards</h1>
+      <p>포트폴리오 영상과 문서 캡쳐용으로 정리한 축약 C++ 코드 카드</p>
+    </section>
+
+    <section class="code-card">
+      <div class="code-header">
+        <div class="window-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="card-meta">PlayerActionPipeline.cpp · UE5 · C++</div>
+      </div>
+      <div class="card-body">
+        <aside class="card-info">
+          <div class="index">01</div>
+          <h2>Player Action FSM<br>Cancel Buffer</h2>
+          <p>입력을 바로 실행하지 않고 ActionRequest로 변환한 뒤, 현재 액션과 캔슬 정책을 검사해서 실행하거나 버퍼에 저장한다.</p>
+          <div class="flow">Input -> Request<br>Request -> CancelRule<br>CancelRule -> StateTransition</div>
+          <div class="mini-diagram">
+            <div class="mini-node player">Player Input</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node player">Action Request</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node common">Cancel Rule</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node system">State Transition</div>
+            <div class="mini-caption">즉시 실행 또는 입력 버퍼 저장</div>
+          </div>
+        </aside>
+        <pre><code><span class="com">// 입력은 바로 실행하지 않고 ActionRequest로 변환한다.</span>
+<span class="kw">void</span> <span class="type">AJunPlayer</span><span class="op">::</span><span class="func">RequestAction</span><span class="op">(</span><span class="type">EPlayerAction</span> <span class="var">NextAction</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="type">FActionRequest</span> <span class="var">Request</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">From</span> <span class="op">=</span> <span class="var">CurrentAction</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">To</span> <span class="op">=</span> <span class="var">NextAction</span><span class="op">;</span>
+
+    <span class="com">// 현재 상태에서 바로 시작할 수 있으면 즉시 실행한다.</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="func">CanStartImmediately</span><span class="op">(</span><span class="var">Request</span><span class="op">))</span>
+    <span class="op">{</span>
+        <span class="func">ProcessAction</span><span class="op">(</span><span class="var">Request</span><span class="op">);</span>
+        <span class="kw">return</span><span class="op">;</span>
+    <span class="op">}</span>
+
+    <span class="com">// 후딜 캔슬 타이밍이 아직 열리지 않았다면 입력을 저장한다.</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="func">CanBuffer</span><span class="op">(</span><span class="var">Request</span><span class="op">))</span>
+    <span class="op">{</span>
+        <span class="var">PendingAction</span> <span class="op">=</span> <span class="var">Request</span><span class="op">;</span>
+    <span class="op">}</span>
+<span class="op">}</span>
+
+<span class="kw">void</span> <span class="type">AJunPlayer</span><span class="op">::</span><span class="func">TryProcessPendingAction</span><span class="op">()</span>
+<span class="op">{</span>
+    <span class="kw">if</span> <span class="op">(!</span><span class="var">PendingAction</span><span class="op">.</span><span class="func">IsSet</span><span class="op">())</span>
+        <span class="kw">return</span><span class="op">;</span>
+
+    <span class="com">// FromAction, ToAction에 맞는 캔슬 규칙을 찾는다.</span>
+    <span class="type">FCancelRule</span> <span class="var">Rule</span> <span class="op">=</span> <span class="func">FindCancelRule</span><span class="op">(</span><span class="var">PendingAction</span><span class="op">);</span>
+
+    <span class="com">// OpenTime 이전이면 아직 캔슬 불가.</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="var">ElapsedTime</span> <span class="op">&lt;</span> <span class="var">Rule</span><span class="op">.</span><span class="var">OpenTime</span><span class="op">)</span>
+        <span class="kw">return</span><span class="op">;</span>
+
+    <span class="com">// 기존 몽타주를 부드럽게 빼고 다음 액션을 실행한다.</span>
+    <span class="func">StopCurrentMontage</span><span class="op">(</span><span class="var">Rule</span><span class="op">.</span><span class="var">BlendOutTime</span><span class="op">);</span>
+    <span class="func">ProcessAction</span><span class="op">(</span><span class="var">PendingAction</span><span class="op">);</span>
+    <span class="var">PendingAction</span><span class="op">.</span><span class="func">Reset</span><span class="op">();</span>
+<span class="op">}</span></code></pre>
+      </div>
+    </section>
+
+    <section class="code-card">
+      <div class="code-header">
+        <div class="window-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="card-meta">PlayerDefenseSystem.cpp · UE5 · C++</div>
+      </div>
+      <div class="card-body">
+        <aside class="card-info">
+          <div class="index">02</div>
+          <h2>Defense<br>Parry System</h2>
+          <p>같은 우클릭 입력을 현재 상태에 따라 패링, 체인 패리, 가드 홀드, 피격 캔슬로 해석한다.</p>
+          <div class="flow">DefenseInput -> StateCheck<br>AttackHit -> ResolveDefense<br>Result -> Parry or Guard or Hit</div>
+          <div class="mini-diagram">
+            <div class="mini-node player">Defense Input</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node common">State Check</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-split">
+              <div class="mini-node system">Parry</div>
+              <div class="mini-node system">Guard</div>
+            </div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node player">Reaction</div>
+            <div class="mini-caption">탭/홀드/피격 상태에 따라 분기</div>
+          </div>
+        </aside>
+        <pre><code><span class="kw">void</span> <span class="type">UDefenseComponent</span><span class="op">::</span><span class="func">HandleDefenseStarted</span><span class="op">()</span>
+<span class="op">{</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="var">Player</span><span class="op">-&gt;</span><span class="func">IsParrySuccess</span><span class="op">())</span>
+    <span class="op">{</span>
+        <span class="com">// 패링 성공 중 재입력: 탭은 체인 패리, 홀드는 가드 전환.</span>
+        <span class="func">RefreshChainParryWindow</span><span class="op">();</span>
+        <span class="func">TryConvertToGuardHold</span><span class="op">();</span>
+        <span class="kw">return</span><span class="op">;</span>
+    <span class="op">}</span>
+
+    <span class="kw">if</span> <span class="op">(</span><span class="var">Player</span><span class="op">-&gt;</span><span class="func">IsHitReacting</span><span class="op">())</span>
+    <span class="op">{</span>
+        <span class="com">// 피격 중에도 정식 캔슬 타이밍이면 방어로 전환한다.</span>
+        <span class="var">Player</span><span class="op">-&gt;</span><span class="func">TryCancelHitReactIntoDefense</span><span class="op">();</span>
+        <span class="kw">return</span><span class="op">;</span>
+    <span class="op">}</span>
+
+    <span class="com">// 일반 입력은 GuardStart를 재생하며 패링 윈도우를 연다.</span>
+    <span class="func">StartGuardStart</span><span class="op">();</span>
+    <span class="func">OpenParryWindow</span><span class="op">();</span>
+<span class="op">}</span>
+
+<span class="type">EDefenseResult</span> <span class="type">UDefenseComponent</span><span class="op">::</span><span class="func">ResolveDefense</span><span class="op">(</span><span class="kw">const</span> <span class="type">FAttackData</span><span class="op">&amp;</span> <span class="var">Attack</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 공격자를 바라보는 각도 안에 있어야 방어 판정 가능.</span>
+    <span class="kw">if</span> <span class="op">(!</span><span class="func">IsFacingAttacker</span><span class="op">(</span><span class="var">Attack</span><span class="op">.</span><span class="var">Attacker</span><span class="op">))</span>
+        <span class="kw">return</span> <span class="var">EDefenseResult</span><span class="op">::</span><span class="var">Hit</span><span class="op">;</span>
+
+    <span class="com">// 완벽 패리 윈도우가 일반 패리보다 우선한다.</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="func">IsPerfectParryWindowOpen</span><span class="op">())</span>
+        <span class="kw">return</span> <span class="var">EDefenseResult</span><span class="op">::</span><span class="var">PerfectParry</span><span class="op">;</span>
+
+    <span class="kw">if</span> <span class="op">(</span><span class="func">IsParryWindowOpen</span><span class="op">())</span>
+        <span class="kw">return</span> <span class="var">EDefenseResult</span><span class="op">::</span><span class="var">NormalParry</span><span class="op">;</span>
+
+    <span class="kw">if</span> <span class="op">(</span><span class="func">CanGuard</span><span class="op">(</span><span class="var">Attack</span><span class="op">))</span>
+        <span class="kw">return</span> <span class="var">EDefenseResult</span><span class="op">::</span><span class="var">GuardBlock</span><span class="op">;</span>
+
+    <span class="kw">return</span> <span class="var">EDefenseResult</span><span class="op">::</span><span class="var">Hit</span><span class="op">;</span>
+<span class="op">}</span></code></pre>
+      </div>
+    </section>
+
+    <section class="code-card">
+      <div class="code-header">
+        <div class="window-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="card-meta">BossCombatFSM.cpp · UE5 · C++</div>
+      </div>
+      <div class="card-body">
+        <aside class="card-info">
+          <div class="index">03</div>
+          <h2>Boss FSM<br>Attack Link</h2>
+          <p>거리, 페이즈, 쿨타임, 확률을 기반으로 공격을 선택하고, 몽타주 Notify에서 다음 공격으로 자연스럽게 링크한다.</p>
+          <div class="flow">StateRequest -> Transition<br>AttackSelect -> Montage<br>Notify -> LinkAttack</div>
+          <div class="mini-diagram">
+            <div class="mini-node boss">Boss State</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node common">Attack Selection</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node boss">Attack Montage</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node system">Link Notify</div>
+            <div class="mini-caption">거리 조건 실패 시 접근 후 재공격</div>
+          </div>
+        </aside>
+        <pre><code><span class="kw">void</span> <span class="type">AJunBoss</span><span class="op">::</span><span class="func">RequestCombatState</span><span class="op">(</span><span class="type">EBossState</span> <span class="var">NextState</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 모든 전투 상태 전환은 하나의 진입점에서 검증한다.</span>
+    <span class="kw">if</span> <span class="op">(!</span><span class="func">CanTransition</span><span class="op">(</span><span class="var">CurrentState</span><span class="op">,</span> <span class="var">NextState</span><span class="op">))</span>
+        <span class="kw">return</span><span class="op">;</span>
+
+    <span class="func">ExitState</span><span class="op">(</span><span class="var">CurrentState</span><span class="op">);</span>
+    <span class="var">CurrentState</span> <span class="op">=</span> <span class="var">NextState</span><span class="op">;</span>
+    <span class="func">EnterState</span><span class="op">(</span><span class="var">CurrentState</span><span class="op">);</span>
+<span class="op">}</span>
+
+<span class="type">FBossAttack</span> <span class="type">AJunBoss</span><span class="op">::</span><span class="func">SelectNextAttack</span><span class="op">()</span>
+<span class="op">{</span>
+    <span class="type">TArray</span><span class="op">&lt;</span><span class="type">FBossAttack</span><span class="op">&gt;</span> <span class="var">Candidates</span> <span class="op">=</span> <span class="func">GetAllAttacks</span><span class="op">();</span>
+
+    <span class="com">// 거리, 페이즈, 쿨타임으로 사용 가능한 공격만 남긴다.</span>
+    <span class="var">Candidates</span> <span class="op">=</span> <span class="func">FilterByDistance</span><span class="op">(</span><span class="var">Candidates</span><span class="op">,</span> <span class="var">TargetDistance</span><span class="op">);</span>
+    <span class="var">Candidates</span> <span class="op">=</span> <span class="func">FilterByPhase</span><span class="op">(</span><span class="var">Candidates</span><span class="op">,</span> <span class="var">CurrentPhase</span><span class="op">);</span>
+    <span class="var">Candidates</span> <span class="op">=</span> <span class="func">FilterByCooldown</span><span class="op">(</span><span class="var">Candidates</span><span class="op">);</span>
+
+    <span class="com">// 후보가 없다면 공격 대신 접근 행동으로 전환한다.</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="var">Candidates</span><span class="op">.</span><span class="func">IsEmpty</span><span class="op">())</span>
+        <span class="kw">return</span> <span class="func">MakeApproachAction</span><span class="op">();</span>
+
+    <span class="kw">return</span> <span class="func">WeightedRandom</span><span class="op">(</span><span class="var">Candidates</span><span class="op">);</span>
+<span class="op">}</span>
+
+<span class="kw">void</span> <span class="type">AJunBoss</span><span class="op">::</span><span class="func">OnAttackLinkNotify</span><span class="op">(</span><span class="kw">const</span> <span class="type">FAttackLinkData</span><span class="op">&amp;</span> <span class="var">LinkData</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 몽타주 Notify 시점에서 다음 공격 링크 여부를 결정한다.</span>
+    <span class="kw">if</span> <span class="op">(!</span><span class="func">ChancePassed</span><span class="op">(</span><span class="var">LinkData</span><span class="op">.</span><span class="var">TriggerChance</span><span class="op">))</span>
+        <span class="kw">return</span><span class="op">;</span>
+
+    <span class="type">FBossAttack</span> <span class="var">NextAttack</span> <span class="op">=</span> <span class="func">SelectLinkCandidate</span><span class="op">(</span><span class="var">LinkData</span><span class="op">);</span>
+
+    <span class="kw">if</span> <span class="op">(!</span><span class="func">IsInRange</span><span class="op">(</span><span class="var">NextAttack</span><span class="op">))</span>
+    <span class="op">{</span>
+        <span class="com">// 사거리 밖이면 먼저 거리를 맞춘 뒤 공격한다.</span>
+        <span class="func">MoveToRangeThenAttack</span><span class="op">(</span><span class="var">NextAttack</span><span class="op">);</span>
+        <span class="kw">return</span><span class="op">;</span>
+    <span class="op">}</span>
+
+    <span class="func">BlendToAttackMontage</span><span class="op">(</span><span class="var">NextAttack</span><span class="op">);</span>
+<span class="op">}</span></code></pre>
+      </div>
+    </section>
+
+    <section class="code-card">
+      <div class="code-header">
+        <div class="window-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="card-meta">CommonCombatHit.cpp · UE5 · C++</div>
+      </div>
+      <div class="card-body">
+        <aside class="card-info">
+          <div class="index">04</div>
+          <h2>Common<br>Attack Trace<br>Hit Reaction</h2>
+          <p>공격자는 공통 HitRequest만 만들고, 피격자는 인터페이스를 통해 각자 패링, 가드, 슈퍼아머, 피격 리액션을 해석한다.</p>
+          <div class="flow">AttackTrace -> HitRequest<br>Interface -> TargetReaction<br>SuperArmor -> PhysicalHit</div>
+          <div class="mini-diagram">
+            <div class="mini-node common">Attack Trace</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node common">Hit Request</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node system">Target Interface</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-split">
+              <div class="mini-node player">Player</div>
+              <div class="mini-node boss">Monster</div>
+            </div>
+            <div class="mini-caption">공격 요청은 같고 반응은 각자 처리</div>
+          </div>
+        </aside>
+        <pre><code><span class="kw">void</span> <span class="type">UAttackTraceNotify</span><span class="op">::</span><span class="func">OnHit</span><span class="op">(</span><span class="type">AActor</span><span class="op">*</span> <span class="var">Target</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 공격자는 대상 클래스를 모르고 공통 HitRequest만 만든다.</span>
+    <span class="type">FAttackHitRequest</span> <span class="var">Request</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">Attacker</span> <span class="op">=</span> <span class="var">Owner</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">Damage</span> <span class="op">=</span> <span class="var">Damage</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">PostureDamage</span> <span class="op">=</span> <span class="var">PostureDamage</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">HitReactType</span> <span class="op">=</span> <span class="var">HitReactType</span><span class="op">;</span>
+    <span class="var">Request</span><span class="op">.</span><span class="var">DefenseRule</span> <span class="op">=</span> <span class="var">DefenseRule</span><span class="op">;</span>
+
+    <span class="kw">if</span> <span class="op">(</span><span class="type">IAttackTarget</span><span class="op">*</span> <span class="var">HitTarget</span> <span class="op">=</span> <span class="func">Cast</span><span class="op">&lt;</span><span class="type">IAttackTarget</span><span class="op">&gt;(</span><span class="var">Target</span><span class="op">))</span>
+    <span class="op">{</span>
+        <span class="com">// 피격자는 자신의 상태에 맞게 패링, 가드, 피격을 해석한다.</span>
+        <span class="var">HitTarget</span><span class="op">-&gt;</span><span class="func">ReceiveAttack</span><span class="op">(</span><span class="var">Request</span><span class="op">);</span>
+    <span class="op">}</span>
+<span class="op">}</span>
+
+<span class="kw">void</span> <span class="type">AJunMonster</span><span class="op">::</span><span class="func">ReceiveAttack</span><span class="op">(</span><span class="kw">const</span> <span class="type">FAttackHitRequest</span><span class="op">&amp;</span> <span class="var">Request</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 방어 계열 결과가 먼저 처리되면 데미지/피격 리액션은 생략된다.</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="func">TryParry</span><span class="op">(</span><span class="var">Request</span><span class="op">))</span>
+        <span class="kw">return</span><span class="op">;</span>
+
+    <span class="kw">if</span> <span class="op">(</span><span class="func">TryGuard</span><span class="op">(</span><span class="var">Request</span><span class="op">))</span>
+        <span class="kw">return</span><span class="op">;</span>
+
+    <span class="func">ApplyDamage</span><span class="op">(</span><span class="var">Request</span><span class="op">.</span><span class="var">Damage</span><span class="op">);</span>
+
+    <span class="kw">if</span> <span class="op">(</span><span class="func">HasSuperArmor</span><span class="op">())</span>
+    <span class="op">{</span>
+        <span class="com">// 슈퍼아머 중에는 몽타주 전환 대신 피지컬 히트만 적용한다.</span>
+        <span class="func">ApplyPhysicalHit</span><span class="op">(</span><span class="var">Request</span><span class="op">);</span>
+        <span class="kw">return</span><span class="op">;</span>
+    <span class="op">}</span>
+
+    <span class="func">PlayHitReactMontage</span><span class="op">(</span><span class="var">Request</span><span class="op">.</span><span class="var">HitReactType</span><span class="op">);</span>
+    <span class="func">ApplyPhysicalHit</span><span class="op">(</span><span class="var">Request</span><span class="op">);</span>
+<span class="op">}</span></code></pre>
+      </div>
+    </section>
+
+    <section class="code-card">
+      <div class="code-header">
+        <div class="window-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="card-meta">ExecutionSystem.cpp · UE5 · C++</div>
+      </div>
+      <div class="card-body">
+        <aside class="card-info">
+          <div class="index">05</div>
+          <h2>Reusable<br>Execution<br>System</h2>
+          <p>플레이어는 실행자 역할만 담당하고, 보스와 NPC는 ExecutionTarget 인터페이스를 통해 각자 처형 결과를 처리한다.</p>
+          <div class="flow">PostureBreak -> Ready<br>Input -> ExecutionTarget<br>Result -> Boss or NPC Rule</div>
+          <div class="mini-diagram">
+            <div class="mini-node boss">Execution Ready</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node player">Player Input</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-node common">Execution Target</div>
+            <div class="mini-arrow">↓</div>
+            <div class="mini-split">
+              <div class="mini-node boss">Boss Life</div>
+              <div class="mini-node system">NPC Reset</div>
+            </div>
+            <div class="mini-caption">대상별 처형 결과를 인터페이스로 분리</div>
+          </div>
+        </aside>
+        <pre><code><span class="kw">bool</span> <span class="type">UExecutionComponent</span><span class="op">::</span><span class="func">TryStartExecution</span><span class="op">()</span>
+<span class="op">{</span>
+    <span class="com">// 처형 가능 대상을 찾고 인터페이스로 검증한다.</span>
+    <span class="type">IExecutionTarget</span><span class="op">*</span> <span class="var">Target</span> <span class="op">=</span> <span class="func">FindExecutionTarget</span><span class="op">();</span>
+
+    <span class="kw">if</span> <span class="op">(!</span><span class="var">Target</span> <span class="op">|| !</span><span class="var">Target</span><span class="op">-&gt;</span><span class="func">CanBeExecutedBy</span><span class="op">(</span><span class="var">Player</span><span class="op">))</span>
+        <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span>
+
+    <span class="com">// 플레이어의 현재 액션을 끊고 처형 액션으로 전환한다.</span>
+    <span class="func">CancelCurrentPlayerAction</span><span class="op">();</span>
+    <span class="func">PlayPlayerExecutionMontage</span><span class="op">(</span><span class="var">Target</span><span class="op">);</span>
+
+    <span class="com">// 대상은 자신의 클래스에 맞는 처형 당하는 흐름을 실행한다.</span>
+    <span class="var">Target</span><span class="op">-&gt;</span><span class="func">BeginExecutedBy</span><span class="op">(</span><span class="var">Player</span><span class="op">);</span>
+    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span>
+<span class="op">}</span>
+
+<span class="kw">void</span> <span class="type">AJunBoss</span><span class="op">::</span><span class="func">BeginExecutedBy</span><span class="op">(</span><span class="type">AJunPlayer</span><span class="op">*</span> <span class="var">Executor</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 보스는 처형 몽타주, Life 감소, 페이즈 전환을 처리한다.</span>
+    <span class="func">StopAllAttackTraces</span><span class="op">();</span>
+    <span class="func">PlayVictimExecutionMontage</span><span class="op">(</span><span class="var">Executor</span><span class="op">);</span>
+    <span class="func">ConsumeBossLife</span><span class="op">();</span>
+    <span class="func">UpdateBossHUD</span><span class="op">();</span>
+<span class="op">}</span>
+
+<span class="kw">void</span> <span class="type">AJunTutorialNPC</span><span class="op">::</span><span class="func">BeginExecutedBy</span><span class="op">(</span><span class="type">AJunPlayer</span><span class="op">*</span> <span class="var">Executor</span><span class="op">)</span>
+<span class="op">{</span>
+    <span class="com">// 튜토리얼 NPC는 죽지 않고 다음 학습 단계로 복구된다.</span>
+    <span class="func">PlayVictimExecutionMontage</span><span class="op">(</span><span class="var">Executor</span><span class="op">);</span>
+    <span class="func">RestoreHealthAndPosture</span><span class="op">();</span>
+    <span class="func">CompleteTutorialExecutionTask</span><span class="op">();</span>
+<span class="op">}</span></code></pre>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

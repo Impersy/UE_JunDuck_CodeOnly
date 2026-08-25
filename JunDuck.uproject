@@ -25,6 +25,10 @@
 		},
 		{
 			"Name": "QOO_RootBoneAdder",
+			"Enabled": false
+		},
+		{
+			"Name": "AnimationWarping",
 			"Enabled": true
 		}
 	]

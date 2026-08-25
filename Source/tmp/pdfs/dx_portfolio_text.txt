@@ -1,0 +1,362 @@
+
+--- PAGE 1 ---
+Game Client Programmer
+DirectX Portfolio
+이종혁
+jhorn3927@gmail.com
+https://youtu.be/MyqkYV1b1fc
+github.com/Impersy
+
+--- PAGE 2 ---
+About Me
+Profile Skills
+전투 시스템 중심의 Gameplay Programming에 관심이 있는 게임 클라이언트 프로그래머입니다. [Language]
+C++
+DirectX 기반 개인/팀 프로젝트를 통해 전투, 카메라, UI, 렌더링 시스템을 구현했습니다.
+[Graphics]
+DirectX9 / DirectX11
+Focus Area
+[Systems]
+Combat Systems · Gameplay Programming · Rendering Systems Deferred Rendering
+OBB Collision
+Particle Instancing
+Combat Systems
+Camera Systems
+Strengths
+문제를 시스템 단위로 분해하고, 게임플레이에 필요한 기능을 구조적으로 구현합니다.
+수학/좌표계 기반 구현(Camera/Minimap)과 최적화 포인트(Instancing)를 경험했습니다.
+
+--- PAGE 3 ---
+Projects Overview
+[Demon Slayer Project]
+DirectX11 Team Project (6인/60일)
+Camera System / Awakening System / UI Systems / VFX(젠이츠, CutScene)
+https://github.com/Impersy/DirectX11-DemonSlayer-Project.git
+[Thymesia Project]
+DirectX11 Personal Project (1인/43일)
+Parry System / Particle Instancing / OBB Collision
+https://github.com/Impersy/DirectX11-Thymesia-Project.git
+[IRA Project]
+DirectX9 Team Project (4인/30일)
+Skill System / Player Combat / Camera System
+https://github.com/Impersy/DirectX9-IRA-Project.git
+
+--- PAGE 4 ---
+[Demon Slayer Project]
+[Project]
+Demon Slayer Recreation
+[Project Info]
+Engine : DirectX11
+Development Period : 60 Days
+Team Size : 6
+[My Core Implementation]
+Combat Camera System
+Awakening Cutscene System
+Minimap UI System
+
+--- PAGE 5 ---
+[Demon Slayer Project] - Combat Camera System
+Feature
+전투 상황에 따라 카메라 시점을 동적으로 전환하는 전투 카메라 시스템
+How it Works
+플레이어-적 전투축을 기반으로 카메라 방향 계산
+플레이어-적 중심(BattleCenter)을 바라보도록 시선 처리
+Battle(Default)
+Combo & 근거리 전투 상황에서만 Side View로 전환
+Lerp 기반 보간으로 카메라 움직임 안정화
+Result
+Player-Enemy 중심 프레이밍을 사용해 전투 대상 가시성 확보
+Combo 상황에서 Side Camera로 전환하여 공격 흐름 강조
+카메라 이동과 시선 방향을 Lerp로 보간해 화면 안정성 유지
+Side(Combo)
+
+--- PAGE 6 ---
+Battle Camera Update
+Battle Camera Logic
+BattleCenter
+Battle(Default)
+Camera Mode State Logic
+BattleCam
+(Default)
+Cutscene Adventure Battle
+SideCam
+Adventure (Combo)
+CutInCam
+Cam
+Demon Slayer Project - Combat Camera System (1/2)
+
+--- PAGE 7 ---
+Side Camera Logic
+Side Camera Update
+Side View
+Troubleshooting
+Problem
+벽력일섬 사용 시 플레이어가 적을 관통하면서 Player-Enemy 전투축이 반전되고,
+그 결과 Side Camera가 반대 방향으로 급회전하는 문제가 발생
+Fix
+외적 계산에 사용되는 전투축의 부호를 m_Hekireki_Dir로 보정해,
+스킬 사용 후에도 Side Camera가 의도한 방향을 유지하도록 개선
+Demon Slayer Project - Combat Camera System (2/2)
+
+--- PAGE 8 ---
+[Demon Slayer Project] - Awakening Cutscene System
+Feature
+각성 연출을 다중 카메라 컷 시퀀스로 구성
+카메라 연산과 컷 시퀀스 제어를 분리한 구조
+How it Works
+컷 데이터(CutInCamDesc)에 각도 / 거리 / 오프셋 / 지속시간 등을 정의
+CutInFinish() → 단일 컷 카메라 연산
+CutInCamera() → 컷 시퀀스 재생 및 전환
+Result
+컷 데이터 구조체
+데이터 기반 컷 구성으로 캐릭터별 연출을 코드 수정 없이 확장 가능
+컷신 종료 후 전투 카메라로 자연스럽게 복귀
+캐릭터별 enum
+캐릭터별 컷 시퀀스를
+저장하는 vector 배열
+
+--- PAGE 9 ---
+CutInFinish( ) -> 단일 컷 카메라 연산
+Role
+데이터 기반으로 카메라 제어
+컷 데이터(CutInCamDesc)를 기반으로 단일 컷의 카메라 연산을 수행
+How it Works
+대상(Player / Enemy) 기준으로 카메라 방향 계산
+수평 / 수직 회전으로 컷 앵글 생성
+거리 / 오프셋 반영 후 카메라 위치 결정
+필요 시 Lerp로 부드럽게 이동
+LookAt으로 시선 설정
+Design Point
+컷 연출 차이를 로직 분기 대신 데이터 조합으로 제어하도록 설계
+Demon Slayer Project - Awakening Cutscene System (1/2)
+
+--- PAGE 10 ---
+CutInCamera( ) –> Cutscene Sequencing
+Role
+컷 시퀀스 재생 및 전환 제어를 담당
+How it Works
+현재 컷 인덱스에 해당하는 컷 데이터 선택
+CutInFinish() 호출로 단일 컷 연산 수행
+LifeTime 기준으로 다음 컷으로 전환
+마지막 컷 종료 시 전투 카메라 상태 복귀
+Design Point
+카메라 연산(CutInFinish)과 컷 시퀀스 제어(CutInCamera)를
+분리해 역할을 명확히 구성
+Demon Slayer Project - Awakening Cutscene System (2/2)
+
+--- PAGE 11 ---
+[Demon Slayer Project] - Minimap System
+Feature
+플레이어의 현재 위치와 진행 방향을 확인할 수 있는 동적 미니맵 UI
+How it Works
+플레이어 월드 좌표를 맵별 UV 좌표로 정규화
+UV 중심 좌표를 기준으로 미니맵 표시 영역 갱신
+플레이어 Look 벡터를 기반으로 아이콘 회전 적용
+Result
+전체 맵이 아닌 주변 영역만 표시해 미니맵 가독성 향상
+플레이어 위치와 방향을 즉시 파악할 수 있어 탐색 편의성 강화
+
+--- PAGE 12 ---
+World Position → UV Mapping
+Concept
+플레이어의 월드 좌표를 맵 기준 UV 좌표로 변환
+How it Works
+플레이어 월드 좌표 (x, z) 추출
+맵별 월드 범위를 기준으로 0~1 UV 좌표로 정규화
+계산된 UV 값을 미니맵 중심 좌표로 사용
+World Space
+월드 좌표 범위를 기준으로 플레이어 위치를 0~1 UV 좌표로 정규화해 미니맵 중심 좌표를 계산
+Player Pos UV Space 맵마다 월드 크기가 다르기 때문에, 각 레벨에 맞는 좌표 범위를 기준으로 UV 변환을 수행
+Normalize
+UV Center
+Demon Slayer Project - Minimap System (1/2)
+
+--- PAGE 13 ---
+UV Crop Rendering
+Concept
+플레이어 중심 UV 좌표를 기준으로 미니맵 표시 영역을 계산
+How it Works
+UV_Cut_Min/Max 로 표시 범위 계산
+중심 좌표가 맵 가장자리에 가까워지면 clamp 처리
+셰이더에서 범위 밖 픽셀을 alpha cut 처리
+해당 프레임 안쪽만
+Rendering
+HLSL
+CPU에서 UV 좌표를 계산하고, GPU 셰이더에서 범위 밖 영역을
+제거하는 방식으로 동적인 미니맵 표시 영역을 구현했다.
+Demon Slayer Project - Minimap System (2/2)
+
+--- PAGE 14 ---
+[Thymesia Project]
+[Project]
+Thymesia Recreation
+[Project Info]
+Engine : DirectX11
+Personal Project
+Development Period : 43 Days
+[My Core Implementation]
+Parry System (KeyFrame)
+Particle Instancing
+Weapon Hit Detection (OBB Collision)
+
+--- PAGE 15 ---
+[Thymesia Project] - Parry System
+Feature
+보스 공격의 애니메이션 / KeyFrame / 충돌 상태를 함께 검사해
+타이밍 기반 패링이 가능하도록 구현
+How it Works
+보스의 현재 공격 애니메이션과 KeyFrame을 확인
+충돌이 발생한 상태에서 패링 가능 프레임 구간이면 성공 처리
+성공 시 Deflect 애니메이션과 패링 이펙트를 재생
+Result
+공격마다 다른 패링 타이밍을 구성할 수 있었고,
+성공 시 즉각적인 반응 애니메이션과 이펙트로 전투 피드백을 강화했다.
+
+--- PAGE 16 ---
+Parry Timing Detection
+Role
+보스 공격별 패링 가능 타이밍 구간 판정 시스템
+How it Works
+현재 보스 공격 애니메이션(m_Boss_Anim_index) 확인
+현재 공격 프레임(m_Boss_KeyFrame)이 패링 가능 구간인지 검사
+충돌(m_Is_Coll)과 패링 입력이 동시에 만족되면 성공 처리
+Design Point
+공격마다 다른 패링 타이밍을 KeyFrame 으로 제어하도록 구성
+Thymesia Project - Parry System (1/2)
+
+--- PAGE 17 ---
+Directional Parry Effect
+Role
+패링 성공 시 방향성 스파크와 라이트 피드백 생성
+How it Works
+Deflect 애니메이션 방향에 따라 파티클 타입 지정
+패링 위치와 월드행렬을 전달해 방향성 이펙트 생성
+Tick에서 빛과 크기를 갱신해 순간적인 타격감 연출
+실제 파티클 확산은 공용 인스턴싱 버퍼 로직에서 처리
+Design Point
+패링 이펙트 오브젝트는 피드백 제어에 집중하고
+실제 파티클 확산 계산은 공용 인스턴싱 버퍼 로직에 위임
+Thymesia Project - Parry System (2/2)
+
+--- PAGE 18 ---
+[Thymesia Project] - Particle Instancing
+Feature
+Parry, Spark, Dust 이펙트를
+Point Instancing 기반 공용 버퍼 구조로 처리하는 경량 파티클 시스템 구현
+How it Works
+이펙트 발생 시 개별 오브젝트 생성 대신 Point Instance Data 생성
+위치, 방향, 크기, 수명 정보를 공용 인스턴싱 버퍼에 등록
+(Parry/Spark/Dust)_Particle Event
+Tick에서 각 인스턴스의 이동, 확산, 수명 감소를 갱신
+동일한 점 기반 파티클을 Instancing 방식으로 일괄 렌더링
+InstanceDesc 설정
+Point Instance Buffer 등록
+Result
+반복 생성되는 점 기반 파티클을 경량 데이터 기반으로 관리
+Tick Update
+Parry, Spark, Dust 이펙트를 하나의 공용 구조로 통합
+Draw Call을 줄이고 렌더링 비용을 최소화
+Instanced Rendering
+
+--- PAGE 19 ---
+InstanceDesc 기반 파티클 초기화
+Role
+Parry, Spark, Dust 파티클의 초기 동작을 header
+InstanceDesc 구조체 기반으로 정의하는 초기화 로직
+How it Works
+InstanceDesc를 전달받아 파티클 초기 설정값으로 저장
+각 인스턴스에 랜덤 속도, 이동 시간, 수명을 부여해 확산 편차 구성
+Instance Buffer를 생성하고 GPU로 전달할 초기 데이터를 준비
+Dir_Type에 따라 Dust / Parry / Spark의 확산 방향을 다르게 계산
+Design Point
+초기 파라미터와 방향 타입 조합으로
+Parry, Spark, Dust 이펙트를 공용 구조에서 처리하도록 구현
+Thymesia Project - Particle Instancing (1/2)
+
+--- PAGE 20 ---
+header
+Instanced Particle Rendering
+Instance Data Update
+Role
+Tick에서 인스턴스 데이터를 갱신하고
+Instancing 방식으로 파티클을 렌더링하는 로직 구현
+CPP
+How it Works
+Tick에서 인스턴스별 위치 데이터 갱신
+방향 벡터와 속도를 이용해 파티클 이동 처리
+갱신된 데이터를 Instance Buffer에 반영
+DrawIndexedInstanced()로 파티클 일괄 렌더링
+Design Point
+Point Instance Buffer 기반으로 파티클 위치를 갱신하여
+다수의 점 파티클을 효율적으로 렌더링하도록 구현
+N particle / 1 Draw Call
+Thymesia Project - Particle Instancing (2/2)
+
+--- PAGE 21 ---
+[Thymesia Project] - Weapon Hit Detection (OBB Collision)
+Feature
+회전하는 무기 궤적을 반영하기 위해
+OBB 기반 충돌 판정으로 근접 공격 히트 검출 구현
+Weapon OBB
+How it Works
+무기의 Bone Transform을 기준으로 Weapon OBB 생성
+매 프레임 월드 행렬을 적용해 회전된 충돌 박스 갱신
+공격 애니메이션의 특정 KeyFrame 구간에서만 히트 판정 활성화
+Hurt Box
+Weapon OBB와 Hurt Box 간 충돌 여부를 검사해 공격 성공 처리
+Result
+무기 방향과 자세 변화가 반영된 공격 판정 구현
+단순 축정렬 박스보다 자연스러운 근접 무기 충돌 처리
+공격 모션과 실제 히트 타이밍의 일관성 확보
+
+--- PAGE 22 ---
+Weapon Hit Detection (OBB)
+Core Logic
+Weapon OBB 생성: 무기 길이와 방향을 반영한 공격 판정 영역 구성
+Bone Transform 갱신: 애니메이션에 따라 OBB 위치 · 회전 갱신
+KeyFrame Hit 판정: 특정 공격 구간에서만 충돌 검사 수행
+Collision Test: Intersect 함수로 Hurt Box 충돌 여부 판정
+특정 KeyFrame 구간 검사
+Collision Algorithm
+Separating Axis Theorem (SAT) 기반으로 구현
+|dot(C1 − C2, axis)| > r1 + r2
+특정 축에서 위 조건이 성립하면 분리축이 존재하므로
+충돌하지 않는 것으로 판단한다.
+SAT 기반 충돌 검사
+Thymesia Project - Weapon Hit Detection (OBB) (1/1)
+
+--- PAGE 23 ---
+[IRA Project]
+[Project]
+IRA Recreation
+[Project Info]
+Engine : DirectX9
+Development Period : 30 Days
+Team Size : 4
+[My Core Implementation]
+Time Stop Skill System
+Player Combat
+
+--- PAGE 24 ---
+[IRA Project] - Time Stop Skill System
+Feature
+Layer 단위 시간 제어를 통해 주변 오브젝트의 업데이트를
+정지시키는 Time Stop Skill 구현
+How it Works
+시간 정지 시 레이어가 관리하는 오브젝트에 0.f 의 TimeDelta를 전달
+적, 일반 오브젝트, 투사체 등의 Tick을 사실상 정지 상태로 처리
+실제 TimeDelta는 레이어에 별도로 저장
+플레이어와 관련된 예외 객체는 실제 TimeDelta를 참조해 계속 갱신
+Result
+Time Stop 상태에서 주변 오브젝트의 움직임을 일괄 정지
+플레이어와 스킬 관련 객체만 선택적으로 동작하도록 제어
+전투 흐름을 일시적으로 제어하는 특수 스킬 구현
+IRA Project - Time Stop Skill System (1/1)
+
+--- PAGE 25 ---
+Thank you for reading
+이종혁
+jhorn3927@gmail.com
+https://youtu.be/MyqkYV1b1fc
+github.com/Impersy
+Code explanation available upon request
