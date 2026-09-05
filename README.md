@@ -96,23 +96,6 @@ Unreal Engine 5와 C++로 제작한 3인칭 액션 전투 개인 프로젝트입
 
 ## Code Structure
 
-Source/JunDuck
-├─ Character
-│  ├─ Player
-│  │  ├─ PlayerComponent
-│  │  └─ PlayerPartials
-│  └─ Monster
-│     ├─ Boss
-│     └─ MonsterPartials
-├─ Combat
-├─ Animation
-├─ AI
-├─ Interface
-├─ Weapon
-├─ Camera
-├─ UI
-└─ System
-
 기능별 코드는 Component와 Partial 파일로 나누고, 공통 전투 기능은 Interface와 Subsystem을 통해 연결했습니다.
 
 ## Repository Scope
